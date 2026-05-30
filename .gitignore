@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+/frontend/node_modules/
+/frontend/dist/
+
+# Python virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local configuration/API keys
+.env
+.env.local
+.env.*.local
+*.env
+config.json
+
+# Local user data/history
+chathistory/
+/chathistory/*.md
+
+# IDEs/Editors
+.vscode/
+.idea/
+.claude/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db

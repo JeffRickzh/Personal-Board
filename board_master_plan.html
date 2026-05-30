@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 个人董事会 2.0 - 终极智能决策协同沙盘</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;600;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        luxury: {
+                            950: '#07090e',
+                            900: '#0d131f',
+                            800: '#152033',
+                            700: '#1e2d47',
+                            600: '#2b3e5c',
+                            400: '#64748b',
+                            300: '#94a3b8',
+                            200: '#cbd5e1',
+                            100: '#e2e8f0',
+                            50: '#f8fafc',
+                        },
+                        gold: {
+                            DEFAULT: '#C5A880',
+                            light: '#E2D4C0',
+                            dark: '#A6885B',
+                            shimmer: '#F0E6D2'
+                        },
+                        indigo: {
+                            DEFAULT: '#6366f1',
+                            dark: '#4f46e5',
+                            light: '#818cf8'
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['Noto Serif SC', 'serif'],
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #07090e;
+            color: #cbd5e1;
+        }
+        .font-serif-sc {
+            font-family: 'Noto Serif SC', serif;
+        }
+        .font-mono-jb {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .glass-card {
+            background: rgba(13, 19, 31, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .glass-card-hover {
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .glass-card-hover:hover {
+            transform: translateY(-4px);
+            border-color: rgba(197, 168, 128, 0.3);
+            box-shadow: 0 30px 60px -15px rgba(197, 168, 128, 0.1);
+        }
+        .gradient-text-gold {
+            background: linear-gradient(135deg, #F0E6D2 0%, #C5A880 50%, #A6885B 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .gradient-border {
+            position: relative;
+        }
+        .gradient-border::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(197, 168, 128, 0.2), rgba(255,255,255,0.05));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #07090e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e2d47;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #C5A880;
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-gold/20 selection:text-gold-light pb-32">
+
+    <!-- Glowing Background Lights -->
+    <div class="fixed top-[-20%] left-[-10%] w-[60vw] h-[60vw] rounded-full bg-indigo-900/10 blur-[150px] pointer-events-none z-0"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-gold/5 blur-[150px] pointer-events-none z-0"></div>
+
+    <div class="relative z-10">
+        <!-- Luxury Navigation / Header -->
+        <header class="w-full border-b border-luxury-800/60 bg-luxury-950/80 backdrop-blur-md py-10 px-6 lg:px-12 sticky top-0 z-50">
+            <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gold/10 text-gold text-xs font-bold uppercase tracking-widest mb-4 border border-gold/20">
+                        <span class="w-2 h-2 rounded-full bg-gold animate-pulse"></span>
+                        Architectural Master Plan v2.0
+                    </div>
+                    <h1 class="text-4xl md:text-5xl font-serif-sc font-black tracking-tight text-white mb-2 leading-tight">
+                        AI 个人董事会 <span class="text-3xl font-light text-gold-light">2.0</span>
+                    </h1>
+                    <p class="text-base text-luxury-300 max-w-2xl font-light">
+                        从“线性聊天”进化为“决策沙盘”。一个结合多智能体博弈、视觉认知、声学临场感以及决策反馈闭环的高阶桌面决策系统。
+                    </p>
+                </div>
+                <div class="flex gap-4">
+                    <a href="#roster" class="px-5 py-2.5 rounded-lg bg-luxury-800 hover:bg-luxury-700 text-sm font-semibold border border-luxury-600/30 transition-all">
+                        成员席位
+                    </a>
+                    <a href="#features" class="px-5 py-2.5 rounded-lg bg-gold hover:bg-gold-dark text-luxury-950 text-sm font-bold shadow-lg shadow-gold/10 transition-all">
+                        核心功能
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Body Grid -->
+        <main class="max-w-6xl mx-auto px-6 lg:px-12 mt-16 space-y-24">
+
+            <!-- Section 0: Philosophy -->
+            <section class="glass-card gradient-border p-8 md:p-12 rounded-3xl relative overflow-hidden">
+                <div class="absolute right-0 top-0 w-96 h-96 bg-gold/5 rounded-full blur-[80px] pointer-events-none"></div>
+                <div class="max-w-3xl">
+                    <h2 class="text-xs font-bold text-gold uppercase tracking-widest mb-3">Core Design Philosophy (核心设计哲学)</h2>
+                    <h3 class="text-2xl md:text-3xl font-serif-sc text-white mb-6 font-bold leading-snug">
+                        “平庸的系统提供现成的答案，伟大的系统促使你提出正确的问题。”
+                    </h3>
+                    <p class="text-luxury-200 leading-relaxed mb-6 font-light">
+                        在开发个人董事会的过程中，我们意识到，**传统的单窗口聊天框模式无法承载真正的战略决策**。高级感不仅来自于界面的半透明质感或排版，更来自于其**决策交互深度**。
+                    </p>
+                    <p class="text-luxury-200 leading-relaxed font-light">
+                        2.0 版本的核心设计全面重构了信息流：你不再是面对一个死板的对话机器人，而是面对一个**多智能体辩论圆桌**。你的提案将被无情解构，你的情绪将被冷静安抚，而你的决策历史，将被客观地记录和量化校准。
+                    </p>
+                </div>
+            </section>
+
+            <!-- Section 1: The Board Roster -->
+            <section id="roster" class="scroll-mt-32">
+                <div class="flex items-center gap-4 mb-10">
+                    <div class="w-12 h-12 rounded-2xl bg-luxury-800 text-gold flex items-center justify-center font-serif-sc font-bold text-2xl border border-luxury-700">I</div>
+                    <div>
+                        <h2 class="text-3xl font-serif-sc font-bold text-white">顶奢决策席位 (The Strategic Roster)</h2>
+                        <p class="text-sm text-luxury-400 mt-1">六位在理性、愿景、系统、真理、谋略、心性上达到人类巅峰的导师组合</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Roster Card 1 -->
+                    <div class="glass-card glass-card-hover p-8 rounded-3xl gradient-border flex flex-col justify-between min-h-[380px]">
+                        <div>
+                            <div class="flex justify-between items-start mb-6">
+                                <span class="px-3 py-1 bg-red-950/40 text-red-400 text-xs font-semibold rounded-md border border-red-900/30">THE RATIONALIST / 理性</span>
+                                <span class="text-xs font-mono-jb text-gold">01</span>
+                            </div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white mb-3">查理·芒格</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed mb-6 font-light">
+                                极致的客观主义与反向思考者。他唯一的任务是寻找你计划中的漏洞，用“多学科思维模型”和“铁锤人倾向”解构盲区。
+                            </p>
+                        </div>
+                        <div>
+                            <div class="border-t border-luxury-800/80 pt-4 mb-4">
+                                <span class="text-xs text-luxury-400 block mb-2">对抗策略 (Adversary Mode)</span>
+                                <p class="text-xs text-gold-light italic">“我没有要说的，除了你正准备做一件极其愚蠢的事。”</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">逆向思维</span>
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">安全边际</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Roster Card 2 -->
+                    <div class="glass-card glass-card-hover p-8 rounded-3xl gradient-border flex flex-col justify-between min-h-[380px] relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 rounded-full blur-2xl"></div>
+                        <div>
+                            <div class="flex justify-between items-start mb-6">
+                                <span class="px-3 py-1 bg-orange-950/40 text-orange-400 text-xs font-semibold rounded-md border border-orange-900/30">THE VISIONARY / 愿景</span>
+                                <span class="text-xs font-mono-jb text-gold">02</span>
+                            </div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white mb-3">史蒂夫·乔布斯</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed mb-6 font-light">
+                                追求极致的美学与颠覆性创新。他负责打破你的妥协，不断逼问你：“这真的已经是最完美的方案了吗？为什么不砍掉这 80% 的垃圾？”
+                            </p>
+                        </div>
+                        <div>
+                            <div class="border-t border-luxury-800/80 pt-4 mb-4">
+                                <span class="text-xs text-luxury-400 block mb-2">对抗策略 (Adversary Mode)</span>
+                                <p class="text-xs text-gold-light italic">“不要妥协。把平庸的细节砍掉，哪怕这会让你痛苦。”</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">现实扭曲</span>
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">极简主义</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Roster Card 3 -->
+                    <div class="glass-card glass-card-hover p-8 rounded-3xl gradient-border flex flex-col justify-between min-h-[380px]">
+                        <div>
+                            <div class="flex justify-between items-start mb-6">
+                                <span class="px-3 py-1 bg-emerald-950/40 text-emerald-400 text-xs font-semibold rounded-md border border-emerald-900/30">THE SYSTEM THINKER / 系统</span>
+                                <span class="text-xs font-mono-jb text-gold">03</span>
+                            </div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white mb-3">瑞·达利欧</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed mb-6 font-light">
+                                机器视角的运行者。他将一切归纳为因果链条，主张“极度求真”和“极度透明”，把决策转化为可复制的科学原则。
+                            </p>
+                        </div>
+                        <div>
+                            <div class="border-t border-luxury-800/80 pt-4 mb-4">
+                                <span class="text-xs text-luxury-400 block mb-2">对抗策略 (Adversary Mode)</span>
+                                <p class="text-xs text-gold-light italic">“我们需要设计一个机器，并客观地分析它运行的数据。”</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">极度透明</span>
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">算法演化</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Roster Card 4 -->
+                    <div class="glass-card glass-card-hover p-8 rounded-3xl gradient-border flex flex-col justify-between min-h-[380px]">
+                        <div>
+                            <div class="flex justify-between items-start mb-6">
+                                <span class="px-3 py-1 bg-blue-950/40 text-blue-400 text-xs font-semibold rounded-md border border-blue-900/30">FIRST PRINCIPLES / 真理</span>
+                                <span class="text-xs font-mono-jb text-gold">04</span>
+                            </div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white mb-3">理查德·费曼</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed mb-6 font-light">
+                                直击本质的物理学家。他要求剔除所有花哨的行业黑话（Jargon）。通过用最朴素、最简单的比喻来检验你是否真正理解自己的提案。
+                            </p>
+                        </div>
+                        <div>
+                            <div class="border-t border-luxury-800/80 pt-4 mb-4">
+                                <span class="text-xs text-luxury-400 block mb-2">对抗策略 (Adversary Mode)</span>
+                                <p class="text-xs text-gold-light italic">“如果你不能用外行能懂的话解释，就证明你还不懂。”</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">费曼技巧</span>
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">直觉构建</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Roster Card 5 -->
+                    <div class="glass-card glass-card-hover p-8 rounded-3xl gradient-border flex flex-col justify-between min-h-[380px]">
+                        <div>
+                            <div class="flex justify-between items-start mb-6">
+                                <span class="px-3 py-1 bg-amber-950/40 text-amber-400 text-xs font-semibold rounded-md border border-amber-900/30">THE STRATEGIST / 谋略</span>
+                                <span class="text-xs font-mono-jb text-gold">05</span>
+                            </div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white mb-3">孙子</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed mb-6 font-light">
+                                东方博弈论的大师。他考虑竞争格局、势能高低以及不对称对抗。主张“多算胜，少算不胜”，寻找阻力最小的奇胜之路。
+                            </p>
+                        </div>
+                        <div>
+                            <div class="border-t border-luxury-800/80 pt-4 mb-4">
+                                <span class="text-xs text-luxury-400 block mb-2">对抗策略 (Adversary Mode)</span>
+                                <p class="text-xs text-gold-light italic">“无形、无声，方能百战不殆。你的底牌暴露得太多了。”</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">势能权衡</span>
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">兵者诡道</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Roster Card 6 -->
+                    <div class="glass-card glass-card-hover p-8 rounded-3xl gradient-border flex flex-col justify-between min-h-[380px]">
+                        <div>
+                            <div class="flex justify-between items-start mb-6">
+                                <span class="px-3 py-1 bg-purple-950/40 text-purple-400 text-xs font-semibold rounded-md border border-purple-900/30">THE STOIC / 心性</span>
+                                <span class="text-xs font-mono-jb text-gold">06</span>
+                            </div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white mb-3">马可·奥勒留</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed mb-6 font-light">
+                                罗马帝国贤君，斯多葛哲学导师。当面临极度焦虑、绝境和不可抗力时，他在精神层面重新锚定你的控制二分法。
+                            </p>
+                        </div>
+                        <div>
+                            <div class="border-t border-luxury-800/80 pt-4 mb-4">
+                                <span class="text-xs text-luxury-400 block mb-2">对抗策略 (Adversary Mode)</span>
+                                <p class="text-xs text-gold-light italic">“收回你的评判，痛苦即消散。你无法控制环境，但能控制情绪。”</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">控制二分法</span>
+                                <span class="px-2.5 py-1 bg-luxury-800/50 text-luxury-200 text-xs rounded-md border border-luxury-700/50">命运之爱</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 2: Six Avant-Garde Features -->
+            <section id="features" class="scroll-mt-32">
+                <div class="flex items-center gap-4 mb-12">
+                    <div class="w-12 h-12 rounded-2xl bg-luxury-800 text-gold flex items-center justify-center font-serif-sc font-bold text-2xl border border-luxury-700">II</div>
+                    <div>
+                        <h2 class="text-3xl font-serif-sc font-bold text-white">六大颠覆性高阶功能 (The Avant-Garde Engine)</h2>
+                        <p class="text-sm text-luxury-400 mt-1">彻底告别单调平庸的AI套壳，打造无可比拟的高级决策体验</p>
+                    </div>
+                </div>
+
+                <div class="space-y-8">
+                    <!-- Feature 1 -->
+                    <div class="glass-card gradient-border p-8 md:p-10 rounded-3xl flex flex-col lg:flex-row gap-8 items-center">
+                        <div class="flex-1 space-y-4">
+                            <div class="inline-block px-2.5 py-1 rounded bg-gold/10 text-gold text-xs font-mono-jb font-semibold">FEATURE 01</div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white">全景决策沙盘 (Unified Decision Sandbox Canvas)</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed font-light">
+                                摒弃对话界面，提供一个基于节点（Nodes）的画布。你的每一个主观构想都可以被拖拽成一个“决策点”。
+                            </p>
+                            <ul class="list-disc list-inside text-xs text-luxury-400 space-y-1.5 ml-2 font-light">
+                                <li><strong>可视化推演</strong>：在画布中将“乔布斯方案”与“芒格反驳”作为分支拉出，并以连线形式展示一阶、二阶、乃至更高层级的连锁反应（Consequence Chains）。</li>
+                                <li><strong>冲突点可视化</strong>：当两位导师发生激烈分歧时，连线上会产生一个高亮红色的“摩擦节点”，点击可查看双方的辩论交锋详情。</li>
+                            </ul>
+                        </div>
+                        <div class="w-full lg:w-96 bg-luxury-950 p-6 rounded-2xl border border-luxury-800">
+                            <!-- Visual Sandbox Mockup -->
+                            <div class="text-[11px] font-mono-jb text-luxury-400 mb-3 border-b border-luxury-800/80 pb-2">SANDBOX PREVIEW</div>
+                            <div class="space-y-3">
+                                <div class="p-3 bg-luxury-800/80 rounded-lg border border-luxury-700 text-xs flex justify-between items-center">
+                                    <span class="text-white">A. 提升产品客单价</span>
+                                    <span class="text-gold text-[10px]">原设想</span>
+                                </div>
+                                <div class="pl-6 border-l-2 border-dashed border-luxury-700 space-y-2">
+                                    <div class="p-3 bg-red-950/20 rounded-lg border border-red-900/30 text-xs">
+                                        <div class="flex justify-between text-red-400 text-[10px] mb-1 font-semibold">
+                                            <span>查理·芒格 (逆向驳斥)</span>
+                                            <span>风险极高</span>
+                                        </div>
+                                        <p class="text-[11px] text-luxury-300">失去低端基本盘，缺乏相匹配的独特服务支撑。</p>
+                                    </div>
+                                    <div class="p-3 bg-orange-950/20 rounded-lg border border-orange-900/30 text-xs">
+                                        <div class="flex justify-between text-orange-400 text-[10px] mb-1 font-semibold">
+                                            <span>史蒂夫·乔布斯 (极速推进)</span>
+                                            <span>极致美学</span>
+                                        </div>
+                                        <p class="text-[11px] text-luxury-300">砍掉三条廉价线，将包装与艺术感提升至顶级奢侈品水准。</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 2 -->
+                    <div class="glass-card gradient-border p-8 md:p-10 rounded-3xl flex flex-col lg:flex-row gap-8 items-center">
+                        <div class="flex-1 space-y-4">
+                            <div class="inline-block px-2.5 py-1 rounded bg-gold/10 text-gold text-xs font-mono-jb font-semibold">FEATURE 02</div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white">“死前剖析”红蓝对抗 (Pre-Mortem Red Teaming)</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed font-light">
+                                芒格的核心思维方式是“反过来想，总是反过来想”。当你上传了一个商业策划书或新项目方案后，你可一键唤醒**极端对抗红蓝模式**。
+                            </p>
+                            <ul class="list-disc list-inside text-xs text-luxury-400 space-y-1.5 ml-2 font-light">
+                                <li><strong>红军（你）</strong>：阐述项目的美好蓝图、用户增长和乐观预期。</li>
+                                <li><strong>蓝军（董事会联盟）</strong>：假设当前时间已经是 <strong>18个月后</strong>，而你的项目已经**彻底宣告失败、破产**。董事会将基于你的财务情况和市场数据，从竞争、组织、技术等角度，深度剖析并写出“事故调查报告”。通过这种极端残酷的压力测试，直接暴露计划的脆弱性。</li>
+                            </ul>
+                        </div>
+                        <div class="w-full lg:w-96 bg-luxury-950 p-6 rounded-2xl border border-luxury-800 text-xs">
+                            <div class="text-[11px] font-mono-jb text-luxury-400 mb-3 border-b border-luxury-800/80 pb-2">PRE-MORTEM TIMELINE (模拟2027年破产)</div>
+                            <div class="space-y-4 font-light">
+                                <div class="flex gap-2">
+                                    <span class="text-red-500 font-bold">1. 资金断裂</span>
+                                    <span class="text-luxury-500">6个月后</span>
+                                </div>
+                                <p class="text-[11px] text-luxury-400">因为乐观预估了客户留存，高额的市场投放未能带来二次复购，现金流比计划提前4个月耗尽。</p>
+                                
+                                <div class="flex gap-2 border-t border-luxury-900 pt-2">
+                                    <span class="text-amber-500 font-bold">2. 竞争降维</span>
+                                    <span class="text-luxury-500">12个月后</span>
+                                </div>
+                                <p class="text-[11px] text-luxury-400">孙子指出：核心技术壁垒过低，巨头通过开源同类算法进行了低成本围剿，项目势能瞬间归零。</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 3 -->
+                    <div class="glass-card gradient-border p-8 md:p-10 rounded-3xl flex flex-col lg:flex-row gap-8 items-center">
+                        <div class="flex-1 space-y-4">
+                            <div class="inline-block px-2.5 py-1 rounded bg-gold/10 text-gold text-xs font-mono-jb font-semibold">FEATURE 03</div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white">主动式董事会备忘录与决策账本 (Decision Ledger & OODA)</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed font-light">
+                                真正的决策者从不在同一个坑里跌倒两次。系统将集成一个**基于密码学的本地“决策账本（Ledger）”**以克服“后视偏差（Hindsight Bias）”。
+                            </p>
+                            <ul class="list-disc list-inside text-xs text-luxury-400 space-y-1.5 ml-2 font-light">
+                                <li><strong>立字为据</strong>：当你拍板做出重大决策（如：招募新VP、砍掉某业务）时，系统要求你写下你的“核心假设”与“六个月预期”。</li>
+                                <li><strong>主动质询</strong>：时间一到，系统会在后台悄然苏醒，弹窗质询：“现在已经过去六个月了，你当时招募的VP表现如何？”</li>
+                                <li><strong>认知校准 (Cognitive Calibration)</strong>：系统会将你当时的乐观假设与现在的真实结果进行对比，计算出你的“偏见系数”（如“你总是对人的能力高估40%，对项目的交付周期低估30%”），从而实现自适应决策矫正。</li>
+                            </ul>
+                        </div>
+                        <div class="w-full lg:w-96 bg-luxury-950 p-6 rounded-2xl border border-luxury-800 font-mono-jb text-[11px]">
+                            <div class="text-luxury-400 mb-2 border-b border-luxury-800 pb-2 flex justify-between">
+                                <span>DECISION_LEDGER_DB</span>
+                                <span class="text-green-500">CALIBRATING</span>
+                            </div>
+                            <div class="space-y-1 text-luxury-300">
+                                <p><span class="text-gold">RECORD_ID:</span> DEC-2026-05</p>
+                                <p><span class="text-gold">USER_PRED:</span> "项目于30天内上线，带来50%转化提升"</p>
+                                <p><span class="text-gold">ACTUAL_OUT:</span> "由于前端架构重构，实际耗时52天，提升12%"</p>
+                                <p class="border-t border-luxury-800 mt-2 pt-2 text-red-400"><span class="text-luxury-400">BIAS_INDEX:</span> 乐观偏差 +34%</p>
+                                <p class="text-indigo-300"><span class="text-luxury-400">BOARD_ADVICE:</span> 建议下次在达利欧的“系数模块”中，对项目周期乘以 1.5 缓冲因子。</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 4 -->
+                    <div class="glass-card gradient-border p-8 md:p-10 rounded-3xl flex flex-col lg:flex-row gap-8 items-center">
+                        <div class="flex-1 space-y-4">
+                            <div class="inline-block px-2.5 py-1 rounded bg-gold/10 text-gold text-xs font-mono-jb font-semibold">FEATURE 04</div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white">格栅原始文献本地高精度检索 (Worldly Wisdom Lattice RAG)</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed font-light">
+                                拒绝任何泛泛而谈的AI套话与空洞模仿。我们将你提供的**《穷查理宝典》中文译本演讲、致股东信、Daily Journal年会纪要**等数十篇最核心的原始文字资料，直接部署在本地进行高精度融合。
+                            </p>
+                            <ul class="list-disc list-inside text-xs text-luxury-400 space-y-1.5 ml-2 font-light">
+                                <li><strong>本地格栅检索引擎</strong>：系统采用高性能的纯 Python 中文字符级 N-gram TF-IDF 检索算法，对文集进行深度语义分片和索引，做到 100% 本地化运行，极速响应，绝不泄露你的任何商业与个人隐私。</li>
+                                <li><strong>引经据典，有据可查</strong>：每次提问时，系统会实时调取与该问题匹配度最高的 3 段芒格历史原始发言。前端将实时渲染出“格栅原始文献依据”版块，列出具体段落与演讲来源（如《人类误判心理学》、Wesco会议纪要），系统强制大模型在推理时必须在此真实依据之上进行剖析，实现真正“有灵魂、有深度”的严谨推演。</li>
+                            </ul>
+                        </div>
+                        <div class="w-full lg:w-96 bg-luxury-950 p-6 rounded-2xl border border-luxury-800 text-xs">
+                            <div class="text-[11px] font-mono-jb text-luxury-400 mb-3 border-b border-luxury-800/80 pb-2">LOCAL CORPUS SCANNER (ACTIVE)</div>
+                            <div class="space-y-3 font-light text-luxury-300">
+                                <div class="flex justify-between items-center text-[10px] text-amber-400">
+                                    <span>[已匹配 3 段历史著作原文]</span>
+                                    <span>权重 94%</span>
+                                </div>
+                                <div class="p-2 bg-luxury-900 border border-luxury-800 rounded-lg text-[10px] leading-relaxed">
+                                    <p class="font-bold text-white mb-0.5">《人类误判心理学》：</p>
+                                    <p class="text-luxury-400 italic">“这会造成许多缺陷。当你从哈佛大学法学院毕业时，你对心理学是完全无知的... 应当把心理学与其他学科整合...”</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- Feature 6 -->
+                    <div class="glass-card gradient-border p-8 md:p-10 rounded-3xl flex flex-col lg:flex-row gap-8 items-center">
+                        <div class="flex-1 space-y-4">
+                            <div class="inline-block px-2.5 py-1 rounded bg-gold/10 text-gold text-xs font-mono-jb font-semibold">FEATURE 06</div>
+                            <h3 class="text-2xl font-serif-sc font-bold text-white">特邀旁听席与“神秘嘉宾”机制 (The Wildcard Seat)</h3>
+                            <p class="text-sm text-luxury-300 leading-relaxed font-light">
+                                卓越的董事会需要不断引入外部新鲜血液。除了六位常设席位，系统提供一列“特邀席位（The Wildcard Seat）”。
+                            </p>
+                            <ul class="list-disc list-inside text-xs text-luxury-400 space-y-1.5 ml-2 font-light">
+                                <li><strong>场景按需召唤</strong>：
+                                    <ul class="list-disc list-inside text-[11px] text-luxury-500 pl-4 mt-1 font-light">
+                                        <li><strong>埃隆·马斯克</strong>：用于极致的量产工程 bottlenecks 解答和“第一性原理”缩减成本。</li>
+                                        <li><strong>尼可罗·马基雅维利</strong>：用于复杂的职场组织架构斗争、博弈、心理防御。</li>
+                                        <li><strong>苏格拉底</strong>：通过无休止的“助产式提问”，逼问你追求这个商业目标的终极人生意义是什么，防止你在金钱的数字中迷失自我。</li>
+                                    </ul>
+                                </li>
+                                <li><strong>无缝集成</strong>：通过高度模板化的 System Prompt 和温度控制，完美融入 LangGraph 的路由节点中，在圆桌会议上贡献极其出世或入世的奇特视角。</li>
+                            </ul>
+                        </div>
+                        <div class="w-full lg:w-96 bg-luxury-950 p-6 rounded-2xl border border-luxury-800 text-xs flex flex-wrap gap-3">
+                            <div class="p-3 bg-luxury-900 border border-luxury-800 rounded-xl flex-1 min-w-[100px] text-center">
+                                <p class="text-white font-bold mb-1">埃隆·马斯克</p>
+                                <span class="text-[10px] text-gold">物理第一原理</span>
+                            </div>
+                            <div class="p-3 bg-luxury-900 border border-luxury-800 rounded-xl flex-1 min-w-[100px] text-center">
+                                <p class="text-white font-bold mb-1">马基雅维利</p>
+                                <span class="text-[10px] text-red-400">组织博弈学</span>
+                            </div>
+                            <div class="p-3 bg-luxury-900 border border-luxury-800 rounded-xl flex-1 min-w-[100px] text-center">
+                                <p class="text-white font-bold mb-1">苏格拉底</p>
+                                <span class="text-[10px] text-indigo-300">本质拷问法</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 3: Deep Technical Architecture -->
+            <section class="scroll-mt-32">
+                <div class="flex items-center gap-4 mb-10">
+                    <div class="w-12 h-12 rounded-2xl bg-luxury-800 text-gold flex items-center justify-center font-serif-sc font-bold text-2xl border border-luxury-700">III</div>
+                    <div>
+                        <h2 class="text-3xl font-serif-sc font-bold text-white">高并发多智能体架构设计 (Technical Architecture)</h2>
+                        <p class="text-sm text-luxury-400 mt-1">基于 LangGraph 状态机编排与 SQLite 本地决策账本的技术设计</p>
+                    </div>
+                </div>
+
+                <div class="space-y-8">
+                    <!-- SVG Diagram -->
+                    <div class="glass-card gradient-border p-6 rounded-3xl">
+                        <div class="text-xs font-mono-jb text-gold mb-4 uppercase tracking-widest text-center">多智能体圆桌辩论数据流与路由状态机 (LangGraph Routing Engine)</div>
+                        <div class="flex justify-center items-center">
+                            <svg class="w-full max-w-4xl" viewBox="0 0 800 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <!-- Nodes -->
+                                <rect x="20" y="110" width="120" height="60" rx="10" fill="#152033" stroke="#C5A880" stroke-width="1.5"/>
+                                <text x="80" y="145" font-family="'Noto Serif SC', serif" font-size="12" fill="#fff" text-anchor="middle">用户提案输入</text>
+                                
+                                <rect x="200" y="110" width="120" height="60" rx="10" fill="#1e2d47" stroke="#818cf8" stroke-width="1.5"/>
+                                <text x="260" y="140" font-family="'Noto Serif SC', serif" font-size="12" fill="#fff" text-anchor="middle">乔布斯 (愿景)</text>
+                                <text x="260" y="155" font-family="'Noto Serif SC', serif" font-size="9" fill="#94a3b8" text-anchor="middle">激进创新方案</text>
+
+                                <rect x="380" y="30" width="120" height="60" rx="10" fill="#1e2d47" stroke="#ef4444" stroke-width="1.5"/>
+                                <text x="440" y="60" font-family="'Noto Serif SC', serif" font-size="12" fill="#fff" text-anchor="middle">查理·芒格 (理性)</text>
+                                <text x="440" y="75" font-family="'Noto Serif SC', serif" font-size="9" fill="#94a3b8" text-anchor="middle">逆向批判漏洞</text>
+
+                                <rect x="380" y="190" width="120" height="60" rx="10" fill="#1e2d47" stroke="#f59e0b" stroke-width="1.5"/>
+                                <text x="440" y="220" font-family="'Noto Serif SC', serif" font-size="12" fill="#fff" text-anchor="middle">孙子 (战略)</text>
+                                <text x="440" y="235" font-family="'Noto Serif SC', serif" font-size="9" fill="#94a3b8" text-anchor="middle">竞争对抗博弈</text>
+
+                                <rect x="540" y="110" width="120" height="60" rx="10" fill="#152033" stroke="#10b981" stroke-width="1.5"/>
+                                <text x="600" y="140" font-family="'Noto Serif SC', serif" font-size="12" fill="#fff" text-anchor="middle">瑞·达利欧 (系统)</text>
+                                <text x="600" y="155" font-family="'Noto Serif SC', serif" font-size="9" fill="#94a3b8" text-anchor="middle">中和意见归纳</text>
+
+                                <rect x="700" y="110" width="90" height="60" rx="10" fill="#C5A880" stroke="#AA7C11" stroke-width="1.5"/>
+                                <text x="745" y="140" font-family="'Noto Serif SC', serif" font-size="12" fill="#07090e" font-weight="bold" text-anchor="middle">决策备忘录</text>
+                                <text x="745" y="155" font-family="'Noto Serif SC', serif" font-size="9" fill="#2b3e5c" text-anchor="middle">写入本地账本</text>
+
+                                <!-- Edges -->
+                                <path d="M 140 140 L 200 140" stroke="#C5A880" stroke-width="2" marker-end="url(#arrow)"/>
+                                <path d="M 320 140 L 380 60" stroke="#818cf8" stroke-width="2" marker-end="url(#arrow)"/>
+                                <path d="M 320 140 L 380 220" stroke="#818cf8" stroke-width="2" marker-end="url(#arrow)"/>
+                                <path d="M 500 60 L 540 140" stroke="#ef4444" stroke-width="2" marker-end="url(#arrow)"/>
+                                <path d="M 500 220 L 540 140" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrow)"/>
+                                <path d="M 660 140 L 700 140" stroke="#10b981" stroke-width="2" marker-end="url(#arrow)"/>
+
+                                <path d="M 540 160 L 260 170" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow)"/>
+                                <text x="400" y="180" font-family="sans-serif" font-size="8" fill="#10b981" text-anchor="middle">若分歧未消解，重新路由迭代 (Max 3 turns)</text>
+
+                                <!-- Definitions for markers -->
+                                <defs>
+                                    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#C5A880"/>
+                                    </marker>
+                                </defs>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Code / Schema Deep Dives -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- Code 1: SQLite Schema -->
+                        <div class="glass-card gradient-border p-6 rounded-2xl">
+                            <h4 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-gold"></span>
+                                SQLite 本地决策账本数据库模式
+                            </h4>
+                            <pre class="bg-luxury-950 p-4 rounded-xl border border-luxury-800 text-[11px] font-mono-jb text-luxury-300 overflow-x-auto">
+<span class="text-emerald-400">-- 存储用户决策输入、董事会建议以及后期的偏见校准数据</span>
+<span class="text-indigo-400">CREATE TABLE</span> <span class="text-white">decision_ledger</span> (
+    id <span class="text-indigo-400">TEXT PRIMARY KEY</span>,         <span class="text-emerald-400">-- UUID/时间戳哈希</span>
+    timestamp <span class="text-indigo-400">DATETIME</span>,          <span class="text-emerald-400">-- 决策发生时间</span>
+    category <span class="text-indigo-400">TEXT</span>,               <span class="text-emerald-400">-- 决策类别 (事业/投资/组织)</span>
+    scenario_desc <span class="text-indigo-400">TEXT</span>,          <span class="text-emerald-400">-- 困境详细描述</span>
+    jobs_proposal <span class="text-indigo-400">TEXT</span>,          <span class="text-emerald-400">-- 乔布斯建议建议</span>
+    munger_critique <span class="text-indigo-400">TEXT</span>,        <span class="text-emerald-400">-- 芒格批判点</span>
+    dalio_system <span class="text-indigo-400">TEXT</span>,           <span class="text-emerald-400">-- 达利欧的机器法则</span>
+    chosen_path <span class="text-indigo-400">TEXT</span>,            <span class="text-emerald-400">-- 用户最终选择的路线</span>
+    user_assumptions <span class="text-indigo-400">TEXT</span>,       <span class="text-emerald-400">-- JSON格式：用户的乐观核心假定</span>
+    actual_outcome <span class="text-indigo-400">TEXT</span>,         <span class="text-emerald-400">-- 实地结果反馈 (后期异步写入)</span>
+    resolved_at <span class="text-indigo-400">DATETIME</span>,        <span class="text-emerald-400">-- 实际结果填写时间</span>
+    bias_index <span class="text-indigo-400">FLOAT</span>,            <span class="text-emerald-400">-- 偏见系数：用户的自我主观乐观度偏差</span>
+    status <span class="text-indigo-400">TEXT DEFAULT</span> <span class="text-amber-300">'PENDING'</span> <span class="text-emerald-400">-- 'PENDING' / 'RESOLVED'</span>
+);</pre>
+                        </div>
+
+                        <!-- Code 2: LangGraph State Machine -->
+                        <div class="glass-card gradient-border p-6 rounded-2xl">
+                            <h4 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-indigo"></span>
+                                LangGraph 状态机数据模型定义 (Python)
+                            </h4>
+                            <pre class="bg-luxury-950 p-4 rounded-xl border border-luxury-800 text-[11px] font-mono-jb text-luxury-300 overflow-x-auto">
+<span class="text-indigo-400">from</span> typing <span class="text-indigo-400">import</span> TypedDict, Annotated, Sequence
+<span class="text-indigo-400">from</span> langgraph.graph <span class="text-indigo-400">import</span> StateGraph
+
+<span class="text-indigo-400">class</span> <span class="text-white">BoardState</span>(<span class="text-gold">TypedDict</span>):
+    <span class="text-emerald-400"># 核心共享的状态机上下文</span>
+    user_query: <span class="text-indigo-400">str</span>                     <span class="text-emerald-400"># 用户提问</span>
+    uploaded_files: <span class="text-indigo-400">list</span>[<span class="text-indigo-400">str</span>]          <span class="text-emerald-400"># 多模态文件路径 (RAG 用)</span>
+    vector_context: <span class="text-indigo-400">str</span>                  <span class="text-emerald-400"># ChromaDB 检索出的事实数据</span>
+    proposals: <span class="text-indigo-400">dict</span>[<span class="text-indigo-400">str</span>, <span class="text-indigo-400">str</span>]          <span class="text-emerald-400"># 各个导师生成的独立草案</span>
+    debate_history: <span class="text-indigo-400">list</span>[<span class="text-indigo-400">dict</span>]          <span class="text-emerald-400"># 辩论历史记录</span>
+    current_mediator_turn: <span class="text-indigo-400">int</span>          <span class="text-emerald-400"># 达利欧调停迭代次数 (Max 3)</span>
+    final_memo: <span class="text-indigo-400">str</span>                      <span class="text-emerald-400"># 最终的综合决议书</span>
+    confidence_score: <span class="text-indigo-400">float</span>              <span class="text-emerald-400"># 决策链整体的安全概率评分</span>
+
+<span class="text-emerald-400"># 编排节点图...</span>
+workflow = StateGraph(BoardState)</pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 4: The 4-Phase Implementation Phasing -->
+            <section class="scroll-mt-32">
+                <div class="flex items-center gap-4 mb-10">
+                    <div class="w-12 h-12 rounded-2xl bg-luxury-800 text-gold flex items-center justify-center font-serif-sc font-bold text-2xl border border-luxury-700">IV</div>
+                    <div>
+                        <h2 class="text-3xl font-serif-sc font-bold text-white">演进与研发路线图 (Engineering Phasing)</h2>
+                        <p class="text-sm text-luxury-400 mt-1">从单智能体MVP，向全场景系统级桌面决策助手的演进计划</p>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <!-- Phase 1 Card -->
+                    <div class="p-8 bg-luxury-900/40 rounded-3xl border border-luxury-800/80 flex flex-col md:flex-row gap-6">
+                        <div class="md:w-48">
+                            <span class="text-xs font-mono-jb text-gold block mb-1">PHASE 01</span>
+                            <h3 class="text-lg font-bold text-white">基础设施与核心桥接</h3>
+                            <span class="inline-block mt-2 px-2.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 text-[10px] font-semibold border border-emerald-900/50">已打通核心 (COMPLETED)</span>
+                        </div>
+                        <div class="flex-1 space-y-2 text-sm font-light text-luxury-300">
+                            <p>完成单智能体“查理·芒格”的 FastAPI 高性能异步后台的开发，对接小米 MiMo API 客户端，设计专有的 <code>&lt;INNER MONOLOGUE&gt;</code> (内心推演) 解析层。</p>
+                            <p class="text-xs text-luxury-500">已跑通流式数据 SSE 输出与多行解析器，为 React 19 完美提供打字机加载效果。</p>
+                        </div>
+                    </div>
+
+                    <!-- Phase 2 Card -->
+                    <div class="p-8 bg-luxury-900/40 rounded-3xl border border-luxury-800/80 flex flex-col md:flex-row gap-6">
+                        <div class="md:w-48">
+                            <span class="text-xs font-mono-jb text-indigo block mb-1">PHASE 02</span>
+                            <h3 class="text-lg font-bold text-white">多模态 RAG 与决策账本</h3>
+                            <span class="inline-block mt-2 px-2.5 py-0.5 rounded bg-indigo-950/80 text-indigo-400 text-[10px] font-semibold border border-indigo-900/50">当前推进 (IN PROGRESS)</span>
+                        </div>
+                        <div class="flex-1 space-y-2 text-sm font-light text-luxury-300">
+                            <p>集成前端 PDF/图片拖拽上传与视觉组件，引入本地向量数据库 <strong>ChromaDB</strong>，封装 PyMuPDF 以便拆解大量非结构化财报与商业计划书。启用本地 SQLite 数据库作为决策账本（Decision Ledger），完成偏见指数（Bias Index）的自动化计算逻辑。</p>
+                        </div>
+                    </div>
+
+                    <!-- Phase 3 Card -->
+                    <div class="p-8 bg-luxury-900/40 rounded-3xl border border-luxury-800/80 flex flex-col md:flex-row gap-6">
+                        <div class="md:w-48">
+                            <span class="text-xs font-mono-jb text-luxury-500 block mb-1">PHASE 03</span>
+                            <h3 class="text-lg font-bold text-white">LangGraph 圆桌会议</h3>
+                            <span class="inline-block mt-2 px-2.5 py-0.5 rounded bg-luxury-800 text-luxury-400 text-[10px] font-semibold border border-luxury-700/50">后续开发 (UPCOMING)</span>
+                        </div>
+                        <div class="flex-1 space-y-2 text-sm font-light text-luxury-300">
+                            <p>装载六位导师的完整 System Prompt，利用 <strong>LangGraph</strong> 编排高阶圆桌辩论。提供全景决策沙盘 UI，基于 Framer Motion 实现丝滑的多通道动态辩论分屏动画。集成 Edge-TTS 提供具有拟真声学质感的“音频圆桌播客”生成模块。</p>
+                        </div>
+                    </div>
+
+                    <!-- Phase 4 Card -->
+                    <div class="p-8 bg-luxury-900/40 rounded-3xl border border-luxury-800/80 flex flex-col md:flex-row gap-6">
+                        <div class="md:w-48">
+                            <span class="text-xs font-mono-jb text-luxury-500 block mb-1">PHASE 04</span>
+                            <h3 class="text-lg font-bold text-white">系统级桌面端与Observer</h3>
+                            <span class="inline-block mt-2 px-2.5 py-0.5 rounded bg-luxury-800 text-luxury-400 text-[10px] font-semibold border border-luxury-700/50">终极释放 (FINAL RELEASE)</span>
+                        </div>
+                        <div class="flex-1 space-y-2 text-sm font-light text-luxury-300">
+                            <p>基于 <strong>Tauri v2 (Rust)</strong> 将整个项目（React 19 + Python/SQLite 独立环境）打包为一键分发的桌面绿色端。集成 Tauri 全局热键与屏幕截图通道，开启“Observer（旁听系统模式）”，驻留系统托盘，随时感知用户的当前窗口内容进行智能提示。</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="w-full border-t border-luxury-800/80 py-12 text-center text-xs text-luxury-500 font-mono-jb">
+            <p>© 2026 AI Personal Board of Directors 2.0. All Rights Reserved. Designed by Antigravity.</p>
+        </footer>
+    </div>
+
+</body>
+</html>
