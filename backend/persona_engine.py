@@ -45,7 +45,7 @@ class PersonaEngine:
         
         for root, _, files in os.walk(self.corpus_path):
             for file in files:
-                if file.endswith(".md"):
+                if file.endswith(".md") or file.endswith(".txt"):
                     file_path = os.path.join(root, file)
                     self.process_file(file_path, file)
                     md_count += 1

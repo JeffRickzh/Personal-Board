@@ -4,8 +4,8 @@ from openai import OpenAI
 
 # 配置小米 MiMo 模型的 API (兼容 OpenAI SDK)
 # Note: The exact base_url for Xiaomi MiMo API might vary. Adjust if necessary.
-MIMO_API_KEY = "sk-cqwylmqq1varypuqxu5q8xr8keffipl8ivsn71ojyk91btgp"
-MIMO_BASE_URL = "https://api.xiaomimimo.com/v1" # Please replace with actual URL if different
+MIMO_API_KEY = "tp-ctbrzw4nnxbc2o4r6x1y4s8l0cpwbc8bfi9b14urxxm6h3jm"
+MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1" # Please replace with actual URL if different
 MODEL_NAME = "mimo-v2.5" # 假设使用最新的 mimo 模型
 
 def load_persona(filepath):
@@ -21,7 +21,7 @@ def build_system_prompt(persona):
 
 def test_munger_agent():
     # Load Persona
-    persona_path = os.path.join(os.path.dirname(__file__), '..', 'agents', 'charlie_munger', 'persona.yaml')
+    persona_path = os.path.join(os.path.dirname(__file__), '..', 'agents', 'munger', 'persona.yaml')
     persona = load_persona(persona_path)
     system_prompt = build_system_prompt(persona)
     

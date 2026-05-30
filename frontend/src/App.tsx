@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, BookOpen, Clock, X, Sparkles, Activity, CheckCircle2 } from 'lucide-react';
+import { Send, Loader2, BookOpen, Clock, X, Sparkles, Activity, CheckCircle2, Trash2, Zap, BrainCircuit, FileSignature, Download, ChevronUp, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,35 +8,36 @@ import remarkGfm from 'remark-gfm';
 import mungerPhoto from './assets/munger.png';
 import buffettPhoto from './assets/buffett.png';
 import grahamPhoto from './assets/graham.png';
+import russellPhoto from './assets/russell.png';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8080';
 
 const BOARD_MEMBERS = [
   { id: 'munger', name: 'Charlie Munger', title: 'Vice Chairman', photo: mungerPhoto, color: 'text-amber-600', border: 'border-amber-400', ring: 'ring-amber-200' },
   { id: 'buffett', name: 'Warren Buffett', title: 'Chairman', photo: buffettPhoto, color: 'text-emerald-600', border: 'border-emerald-400', ring: 'ring-emerald-200' },
   { id: 'paul_graham', name: 'Paul Graham', title: 'Advisor', photo: grahamPhoto, color: 'text-indigo-600', border: 'border-indigo-400', ring: 'ring-indigo-200' },
+  { id: 'russell', name: 'Bertrand Russell', title: 'Philosopher', photo: russellPhoto, color: 'text-slate-600', border: 'border-slate-400', ring: 'ring-slate-200' },
 ];
 
-
-interface MemberState {
-  status: 'idle' | 'retrieving' | 'speaking' | 'done';
-  message?: string;
-  text: string;
-  quotes: any[];
-}
-
-interface CurrentSession {
-  [key: string]: MemberState;
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'secretary';
+  content: string;
+  member_id?: string;
+  member_name?: string;
+  quotes?: any[];
 }
 
 interface HistoryItem {
-  query: string;
-  session: CurrentSession;
-  resolution: string;
+  filename: string;
+  title: string;
+  timestamp: number;
+  session_id: string;
 }
 
 const MarkdownComponents: any = {
-  h1: ({node, ...props}: any) => <h1 className="text-3xl font-bold mt-6 mb-4" {...props} />,
-  h2: ({node, ...props}: any) => <h2 className="text-2xl font-bold mt-5 mb-3 text-slate-800" {...props} />,
-  h3: ({node, ...props}: any) => <h3 className="text-xl font-bold mt-4 mb-2 text-slate-800" {...props} />,
+  h1: ({node, ...props}: any) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
+  h2: ({node, ...props}: any) => <h2 className="text-xl font-bold mt-5 mb-3 text-slate-800" {...props} />,
+  h3: ({node, ...props}: any) => <h3 className="text-lg font-bold mt-4 mb-2 text-slate-800" {...props} />,
   p: ({node, ...props}: any) => <p className="mb-4 leading-[1.8]" {...props} />,
   ul: ({node, ...props}: any) => <ul className="list-disc pl-6 mb-4 space-y-2" {...props} />,
   ol: ({node, ...props}: any) => <ol className="list-decimal pl-6 mb-4 space-y-2" {...props} />,
@@ -57,44 +58,92 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [fileHistory, setFileHistory] = useState<{filename: string, timestamp: number}[]>([]);
-  const [viewingHistory, setViewingHistory] = useState<string | null>(null);
-  const [currentSession, setCurrentSession] = useState<CurrentSession>({});
-  const [currentQuery, setCurrentQuery] = useState('');
-  const [secretaryResolution, setSecretaryResolution] = useState('');
-  const [secretaryStatus, setSecretaryStatus] = useState<'idle' | 'synthesizing' | 'done'>('idle');
+  const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sessionId, setSessionId] = useState<string>('');
+  const [mode, setMode] = useState<'fast' | 'pro'>('fast');
+  const [participatingMembers, setParticipatingMembers] = useState<string[]>(BOARD_MEMBERS.map(m => m.id));
+  
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState<{member_id: string, state: string, message: string} | null>(null);
+  const [systemMsg, setSystemMsg] = useState<string>('');
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
 
-  const activeMemberIds = BOARD_MEMBERS.map(m => m.id);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef<boolean>(true);
+
+  const handleScroll = () => {
+    if (scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      // If the user has scrolled up by more than 80px from the absolute bottom,
+      // we disable auto-scrolling to prioritize the user's manual scrolling.
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 80;
+      shouldAutoScrollRef.current = isNearBottom;
+    }
+  };
 
   // Auto-scroll the main stage
   useEffect(() => {
-    if (scrollRef.current) {
+    if (shouldAutoScrollRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [currentSession, secretaryResolution]);
+  }, [messages, currentStatus, systemMsg]);
 
   useEffect(() => {
     if (isDrawerOpen) {
-      fetch('http://127.0.0.1:8000/api/history')
-        .then(res => res.json())
-        .then(data => setFileHistory(data))
-        .catch(console.error);
+      fetchHistoryList();
     }
   }, [isDrawerOpen]);
 
-  const loadHistoryFile = async (filename: string) => {
+  const fetchHistoryList = async () => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/history/${filename}`);
+      const res = await fetch(`${API_BASE}/api/history`);
       const data = await res.json();
-      if (data.content) {
-        setViewingHistory(data.content);
-        setIsDrawerOpen(false);
-      }
+      setHistoryList(data);
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const loadHistoryFile = async (filename: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/history/${encodeURIComponent(filename)}`);
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      if (data.messages) {
+        shouldAutoScrollRef.current = true;
+        setMessages(data.messages);
+        setSessionId(data.session_id);
+        setIsDrawerOpen(false);
+      } else {
+        throw new Error("No messages found in this record.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to load history record: " + err.message);
+    }
+  };
+
+  const deleteHistoryFile = async (e: React.MouseEvent, filename: string) => {
+    e.stopPropagation();
+    try {
+      await fetch(`${API_BASE}/api/history/${filename}`, { method: 'DELETE' });
+      fetchHistoryList();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const toggleParticipation = (id: string) => {
+    if (isProcessing) return;
+    setParticipatingMembers(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -103,18 +152,28 @@ export default function App() {
 
     const query = input.trim();
     setInput('');
-    setCurrentQuery(query);
     setIsProcessing(true);
-    setCurrentSession({});
-    setSecretaryResolution('');
-    setSecretaryStatus('idle');
-    setViewingHistory(null);
+    setSystemMsg('');
+    setCurrentStatus(null);
+    shouldAutoScrollRef.current = true;
+    
+    // Create new session ID if it's the very first message
+    const currentSessionId = sessionId || crypto.randomUUID();
+    if (!sessionId) setSessionId(currentSessionId);
+
+    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: query }];
+    setMessages(newMessages);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/chat_stream', {
+      const response = await fetch(`${API_BASE}/api/chat_stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: query, board_member_ids: activeMemberIds })
+        body: JSON.stringify({ 
+          messages: newMessages, 
+          board_member_ids: participatingMembers,
+          mode: mode,
+          session_id: currentSessionId
+        })
       });
 
       if (!response.body) throw new Error('No readable stream');
@@ -127,16 +186,11 @@ export default function App() {
         if (done) break;
         
         buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
         
-        // Split the buffer by double newlines to isolate complete SSE messages
-        const messages = buffer.split('\n\n');
-        // Keep the last, potentially incomplete message in the buffer
-        buffer = messages.pop() || '';
-        
-        for (const message of messages) {
+        for (const message of parts) {
           if (!message.trim()) continue;
-          
-          // An SSE message can contain multiple 'data: ' lines if split, though normally just one
           const lines = message.split('\n');
           let dataStr = '';
           for (const line of lines) {
@@ -150,64 +204,39 @@ export default function App() {
           try {
             const data = JSON.parse(dataStr);
             
-            if (data.event === 'status') {
-              if (data.member_id === 'secretary') {
-                 setSecretaryStatus('synthesizing');
-              } else {
-                setCurrentSession(prev => ({
-                  ...prev,
-                  [data.member_id]: { 
-                    ...prev[data.member_id], 
-                    status: data.state, 
-                    message: data.message,
-                    text: prev[data.member_id]?.text || '',
-                    quotes: prev[data.member_id]?.quotes || []
-                  }
-                }));
-              }
+            if (data.event === 'system') {
+              setSystemMsg(data.message);
+            } else if (data.event === 'status') {
+              setCurrentStatus({member_id: data.member_id, state: data.state, message: data.message});
             } else if (data.event === 'quotes') {
-              setCurrentSession(prev => ({
-                ...prev,
-                [data.member_id]: { 
-                  ...prev[data.member_id], 
-                  quotes: data.quotes 
-                }
-              }));
+               setMessages(prev => [...prev, { 
+                 role: 'assistant', 
+                 member_id: data.member_id, 
+                 content: '', 
+                 quotes: data.quotes 
+               }]);
             } else if (data.event === 'token') {
-              setCurrentSession(prev => ({
-                ...prev,
-                [data.member_id]: { 
-                  ...prev[data.member_id], 
-                  text: (prev[data.member_id]?.text || '') + data.text 
-                }
-              }));
+               setMessages(prev => {
+                 const lastMsg = prev[prev.length - 1];
+                 if (lastMsg && lastMsg.role === 'assistant' && lastMsg.member_id === data.member_id) {
+                    return [...prev.slice(0, -1), { ...lastMsg, content: lastMsg.content + data.text }];
+                 }
+                 return prev;
+               });
             } else if (data.event === 'turn_end') {
-              setCurrentSession(prev => ({
-                ...prev,
-                [data.member_id]: { 
-                  ...prev[data.member_id], 
-                  status: 'done' 
-                }
-              }));
+               setCurrentStatus(null);
             } else if (data.event === 'error') {
-              setCurrentSession(prev => ({
-                ...prev,
-                [data.member_id]: { 
-                  ...prev[data.member_id], 
-                  status: 'done',
-                  text: (prev[data.member_id]?.text || '') + `\n\n*(Error: ${data.message || '推理引擎执行失败'})*`
-                }
-              }));
-            } else if (data.event === 'secretary_token') {
-              setSecretaryResolution(prev => prev + data.text);
+               setMessages(prev => {
+                 const lastMsg = prev[prev.length - 1];
+                 if (lastMsg && lastMsg.role === 'assistant' && lastMsg.member_id === data.member_id) {
+                    return [...prev.slice(0, -1), { ...lastMsg, content: lastMsg.content + `\n\n*(Error: ${data.message})*` }];
+                 }
+                 return prev;
+               });
             } else if (data.event === 'board_end') {
-              setIsProcessing(false);
-              setSecretaryStatus('done');
-              setHistory(prev => [...prev, {
-                 query: query,
-                 session: currentSession,
-                 resolution: secretaryResolution
-              }]);
+               setIsProcessing(false);
+               setSystemMsg('');
+               if (data.session_id) setSessionId(data.session_id);
             }
           } catch (err) {
             console.error("Parse error", err, dataStr);
@@ -217,16 +246,75 @@ export default function App() {
     } catch (error: any) {
       console.error("API Error:", error);
       setIsProcessing(false);
-      
-      // Immediately display connection error inside the first board member box so the user gets clear visual feedback
-      const firstMemberId = activeMemberIds[0] || 'munger';
-      setCurrentSession({
-        [firstMemberId]: {
-          status: 'done',
-          text: `### ⚠️ API Connection Error\n\nFailed to connect to the backend server. Please make sure the Python server is running.\n\n*Error details: ${error.message || error}*`,
-          quotes: []
-        }
+      setMessages(prev => [...prev, { role: 'assistant', member_id: 'system', content: `⚠️ API Connection Error: ${error.message}` }]);
+    }
+  };
+
+  const handleSynthesize = async () => {
+    if (isProcessing || messages.length === 0) return;
+    setIsProcessing(true);
+    setIsSynthesizing(true);
+    setSystemMsg('Chief Secretary is drafting the Executive Resolution...');
+
+    try {
+      const response = await fetch(`${API_BASE}/api/synthesize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: messages, 
+          session_id: sessionId
+        })
       });
+
+      if (!response.body) throw new Error('No readable stream');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+        
+        for (const message of parts) {
+          if (!message.trim()) continue;
+          let dataStr = '';
+          message.split('\n').forEach(line => {
+            if (line.startsWith('data: ')) dataStr += line.slice(6);
+          });
+          if (!dataStr) continue;
+          
+          try {
+            const data = JSON.parse(dataStr);
+            if (data.event === 'status') {
+               setMessages(prev => [...prev, { role: 'secretary', content: '' }]);
+            } else if (data.event === 'secretary_token') {
+               setMessages(prev => {
+                 const lastMsg = prev[prev.length - 1];
+                 return [...prev.slice(0, -1), { ...lastMsg, content: lastMsg.content + data.text }];
+               });
+            } else if (data.event === 'synthesis_end') {
+               setIsProcessing(false);
+               setIsSynthesizing(false);
+               setSystemMsg('');
+            } else if (data.event === 'error') {
+               setMessages(prev => {
+                 const lastMsg = prev[prev.length - 1];
+                 return [...prev.slice(0, -1), { ...lastMsg, content: lastMsg.content + `\n\n*(Error: ${data.message})*` }];
+               });
+            }
+          } catch (err) {
+            console.error("Parse error", err, dataStr);
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error("Synthesis Error:", error);
+      setIsProcessing(false);
+      setIsSynthesizing(false);
     }
   };
 
@@ -237,13 +325,98 @@ export default function App() {
     }
   };
 
-  // Determine active speaker for Focus Stage
-  let activeMember = BOARD_MEMBERS.find(m => {
-    const s = currentSession[m.id];
-    return s && (s.status === 'retrieving' || s.status === 'speaking');
-  });
+  const handleExportMarkdown = () => {
+    if (messages.length === 0) return;
 
-  const isSecretaryActive = secretaryStatus === 'synthesizing' || secretaryStatus === 'done';
+    // Get the first user query as the title or a fallback
+    const firstUserMsg = messages.find(m => m.role === 'user')?.content || '战略决议';
+    const cleanTitle = firstUserMsg.replace(/[\n\r\t]/g, ' ').trim().slice(0, 30);
+    const dateStr = new Date().toLocaleString('zh-CN', { hour12: false });
+    
+    // Calculate active members
+    const activeMembers = participatingMembers
+      .map(id => BOARD_MEMBERS.find(m => m.id === id))
+      .filter(Boolean)
+      .map(m => `${m?.name} (${m?.title})`)
+      .join(', ');
+
+    let md = '';
+    
+    // 1. Grand Header with beautiful typography style
+    md += `# 🏛️ 个人董事会决议与会议纪要\n`;
+    md += `## *Executive Resolution & Council Transcript*\n\n`;
+    
+    md += `> **备忘录声明**: 本文件为个人董事会 (Personal Board of Directors) 决策会议的正式纪要。以下记录由人工智能引擎驱动，结合了商业巨擘与哲学先贤的多学科格栅模型及真实言论数据进行推演，供战略决策参考。\n\n`;
+    
+    // 2. Metadata Table
+    md += `### 📊 会议基础信息 / Session Information\n\n`;
+    md += `| 会议属性 (Field) | 会议数据 (Value) |\n`;
+    md += `| :--- | :--- |\n`;
+    md += `| **会议议题 / Title** | ${firstUserMsg.replace(/[\n\r\t]/g, ' ').trim().slice(0, 50)}${firstUserMsg.length > 50 ? '...' : ''} |\n`;
+    md += `| **会议标识 / Session ID** | \`${sessionId || 'N/A'}\` |\n`;
+    md += `| **会议模式 / Debate Mode** | ${mode === 'pro' ? '🧠 Pro 模式 (深度辩论)' : '⚡ Fast 模式 (快速顾问)'} |\n`;
+    md += `| **参会董事 / Attendees** | ${activeMembers || '无'} |\n`;
+    md += `| **导出时间 / Exported At** | ${dateStr} |\n\n`;
+    
+    md += `---\n\n`;
+
+    // 3. Conversation History
+    md += `# 💬 研讨及辩论实录 / Council Debates & Testimony\n\n`;
+
+    messages.forEach((msg) => {
+      if (msg.role === 'assistant') {
+        const memberInfo = BOARD_MEMBERS.find(m => m.id === msg.member_id);
+        const name = memberInfo?.name || '未知董事';
+        const title = memberInfo?.title || 'Board Member';
+        
+        md += `### 💬 董事陈词: ${name} (${title})\n\n`;
+        md += `${msg.content}\n\n`;
+        md += `---\n\n`;
+      } else if (msg.role === 'secretary') {
+        md += `# 📝 最终决议草案 / Executive Consensus Resolution\n\n`;
+        md += `### 🏢 首席书记员会议纪要 / Chief Board Secretary Report\n\n`;
+        md += `> **签发机构**: 个人董事会秘书处 (Office of the Chief Secretary)  \n`;
+        md += `> **当前状态**: 会后共识达成 & 终审归档  \n\n`;
+        md += `${msg.content}\n\n`;
+        md += `---\n\n`;
+      }
+    });
+
+    // 4. Signatures Table for premium aesthetic
+    md += `### ✍️ 董事会决议正式签署栏 / Executive Signatures\n\n`;
+    md += `| 席位 / Title | 参会董事 / Director | 决议签署 / Signature | 归档确认 / Status |\n`;
+    md += `| :--- | :--- | :--- | :--- |\n`;
+    
+    participatingMembers.forEach(id => {
+      const memberInfo = BOARD_MEMBERS.find(m => m.id === id);
+      if (memberInfo) {
+        md += `| **${memberInfo.title}** | ${memberInfo.name} | *Approved & Signed via Engine* | 🟢 Verified |\n`;
+      }
+    });
+    md += `| **Chief Board Secretary** | AI Secretary Executive | *Officially Recorded & Logged* | 🟢 Verified |\n\n`;
+
+    md += `---\n`;
+    md += `*个人董事会决策支撑系统 © 2026 Personal Board of Directors. 所有论点基于多学科格栅模型推演，保留最终解释权。*\n`;
+
+    // 5. Trigger download in browser
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    // Clean filename
+    const safeFilename = cleanTitle
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/\s+/g, '_')
+      .slice(0, 30);
+    
+    link.href = url;
+    link.setAttribute('download', `Board_Resolution_${safeFilename || 'Session'}.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const hasSecretaryResponse = messages.length > 0 && messages[messages.length - 1].role === 'secretary';
 
   return (
     <div className="flex flex-col h-screen w-full bg-slate-50 overflow-hidden relative font-sans selection:bg-indigo-100">
@@ -254,8 +427,8 @@ export default function App() {
         <div className="absolute top-[40%] -right-[10%] w-[40%] h-[60%] bg-amber-100/40 rounded-full blur-[100px]" />
       </div>
 
-      {/* TOP LEFT: History Drawer Button */}
-      <div className="absolute top-8 left-8 z-50">
+      {/* TOP LEFT: History Drawer Button & New Chat */}
+      <div className="absolute top-8 left-8 z-50 flex gap-3">
         <button 
           onClick={() => setIsDrawerOpen(true)}
           className="flex items-center gap-2 bg-white/80 hover:bg-white text-slate-700 px-5 py-3 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
@@ -263,7 +436,30 @@ export default function App() {
           <Clock size={18} />
           <span className="text-sm font-bold tracking-widest uppercase text-slate-500">Records</span>
         </button>
+        {messages.length > 0 && (
+          <button 
+            onClick={() => { setMessages([]); setSessionId(''); }}
+            className="flex items-center justify-center bg-white/80 hover:bg-white text-slate-500 hover:text-indigo-600 w-12 h-12 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
+            title="New Council Session"
+          >
+            <Sparkles size={18} />
+          </button>
+        )}
       </div>
+
+      {/* TOP RIGHT: One-click Download / Export MD */}
+      {messages.length > 0 && (
+        <div className="absolute top-8 right-8 z-50">
+          <button 
+            onClick={handleExportMarkdown}
+            className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-5 py-3 rounded-full border border-slate-800 shadow-md transition-all active:scale-95 duration-150"
+            title="Export Session as Markdown"
+          >
+            <Download size={18} />
+            <span className="text-sm font-bold tracking-widest uppercase">Export MD</span>
+          </button>
+        </div>
+      )}
 
       {/* History Drawer */}
       <AnimatePresence>
@@ -284,14 +480,22 @@ export default function App() {
                 <button onClick={() => setIsDrawerOpen(false)} className="text-slate-400 hover:text-slate-800 transition-colors"><X size={24}/></button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-                {fileHistory.length === 0 ? (
+                {historyList.length === 0 ? (
                    <div className="text-slate-400 text-sm text-center mt-20 font-medium">No records yet.</div>
-                ) : fileHistory.map((item, i) => {
-                  const title = item.filename.replace('.md', '').substring(16) || "Session";
+                ) : historyList.map((item, i) => {
                   return (
-                    <div key={i} onClick={() => loadHistoryFile(item.filename)} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-                      <div className="text-xs text-indigo-500 font-black tracking-widest uppercase mb-3">{new Date(item.timestamp * 1000).toLocaleString()}</div>
-                      <p className="text-slate-800 text-base font-medium line-clamp-2">{title}</p>
+                    <div key={i} onClick={() => loadHistoryFile(item.filename)} className="group relative bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="text-xs text-indigo-500 font-black tracking-widest uppercase">{new Date(item.timestamp * 1000).toLocaleString()}</div>
+                        <button 
+                          onClick={(e) => deleteHistoryFile(e, item.filename)} 
+                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-all"
+                          title="Delete Record"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <p className="text-slate-800 text-base font-medium line-clamp-2">{item.title}</p>
                     </div>
                   );
                 })}
@@ -302,178 +506,147 @@ export default function App() {
       </AnimatePresence>
 
       {/* HEADER: The Council Ring */}
-      <header className="w-full flex justify-center items-center py-10 z-10">
-        <div className="flex items-center gap-12 bg-white/50 backdrop-blur-xl px-12 py-6 rounded-[3rem] border border-slate-200/60 shadow-sm">
+      <header className={`w-full flex justify-center items-center z-10 transition-all duration-500 ${isHeaderCollapsed ? 'py-4' : 'py-10'}`}>
+        <div className={`relative flex items-center bg-white/50 backdrop-blur-xl border border-slate-200/60 shadow-sm transition-all duration-500 ${isHeaderCollapsed ? 'px-8 py-3.5 gap-6 rounded-[2rem]' : 'px-12 py-6 gap-12 rounded-[3rem]'}`}>
           {BOARD_MEMBERS.map(member => {
-            const state = currentSession[member.id];
-            const isActive = state?.status === 'retrieving' || state?.status === 'speaking';
-            const isDone = state?.status === 'done';
+            const isParticipating = participatingMembers.includes(member.id);
+            const isCurrentSpeaker = currentStatus?.member_id === member.id;
             
             return (
               <div 
                 key={member.id} 
-                className={`flex flex-col items-center transition-all duration-500 ${isActive ? 'scale-110' : (isDone ? 'scale-95 opacity-60 grayscale' : 'scale-100')}`}
+                onClick={() => toggleParticipation(member.id)}
+                className={`flex flex-col items-center transition-all duration-500 cursor-pointer ${!isParticipating ? 'opacity-40 grayscale' : 'hover:scale-105'} ${isCurrentSpeaker ? 'scale-105 opacity-100 grayscale-0' : ''}`}
+                title={isParticipating ? "Click to exclude from next round" : "Click to include in next round"}
               >
                 <div className="relative">
-                  <div className={`w-20 h-20 rounded-full overflow-hidden border-4 transition-all duration-500 bg-white shadow-md ${isActive ? `border-transparent ring-4 ring-offset-2 ${member.ring}` : 'border-white'}`}>
+                  <div className={`rounded-full overflow-hidden border-2 transition-all duration-500 bg-white shadow-md ${isHeaderCollapsed ? 'w-10 h-10' : 'w-20 h-20 border-4'} ${isCurrentSpeaker ? `border-transparent ring-4 ring-offset-2 ${member.ring}` : 'border-white'}`}>
                     <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
                   </div>
-                  {isDone && (
-                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full text-emerald-500 border border-slate-200 shadow-sm">
-                      <CheckCircle2 size={24} />
+                  {isParticipating && (
+                    <div className={`absolute -bottom-1 -right-1 bg-white rounded-full text-emerald-500 border border-slate-200 shadow-sm transition-all duration-300 ${isHeaderCollapsed ? 'p-0' : ''}`}>
+                      <CheckCircle2 size={isHeaderCollapsed ? 14 : 24} className="fill-emerald-50" />
                     </div>
                   )}
                 </div>
-                <div className={`mt-4 text-sm font-bold tracking-wide ${isActive ? 'text-slate-800 font-extrabold' : 'text-slate-500'}`}>{member.name}</div>
-                <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{member.title}</div>
-                {isActive && (
-                  <div className={`mt-2 text-[10px] uppercase tracking-widest font-black animate-pulse ${member.color}`}>
-                    {state.status === 'retrieving' ? 'Retrieving Memory...' : 'Speaking...'}
+                
+                {/* Names and speaking indicator are hidden when collapsed */}
+                {!isHeaderCollapsed && (
+                  <div className="flex flex-col items-center mt-4 transition-all duration-300">
+                    <div className={`text-sm font-bold tracking-wide ${isCurrentSpeaker ? 'text-slate-800 font-extrabold' : 'text-slate-500'}`}>{member.name}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{member.title}</div>
+                    {isCurrentSpeaker && (
+                      <div className={`mt-2 text-[10px] uppercase tracking-widest font-black animate-pulse ${member.color}`}>
+                        {currentStatus.state === 'retrieving' ? 'Retrieving Memory...' : 'Speaking...'}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             );
           })}
 
-
+          {/* Sleek Collapse/Expand Toggle Tab */}
+          <button 
+            onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+            className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-white hover:bg-slate-900 text-slate-400 hover:text-white w-7 h-7 rounded-full border border-slate-200/80 shadow-md flex items-center justify-center transition-all duration-300 hover:scale-110 z-20 cursor-pointer"
+            title={isHeaderCollapsed ? "展开面板" : "收起面板"}
+          >
+            {isHeaderCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          </button>
         </div>
       </header>
 
-      {/* MIDDLE: Focus Stage */}
+      {/* MIDDLE: Focus Stage & Chat History */}
       <main className="flex-1 overflow-hidden relative z-10 w-full flex flex-col items-center">
         
-        <div ref={scrollRef} className="flex-1 w-full max-w-5xl overflow-y-auto px-8 pt-8 pb-12 scrollbar-hide flex flex-col gap-12">
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 w-full max-w-5xl overflow-y-auto px-8 pb-12 scrollbar-hide flex flex-col gap-8">
           
-          {viewingHistory ? (
-            <div className="w-full max-w-4xl mx-auto bg-white border border-slate-200/80 shadow-[0_30px_100px_rgba(0,0,0,0.06)] rounded-[2.5rem] p-16 relative overflow-hidden mt-8 mb-12">
-               <button onClick={() => setViewingHistory(null)} className="absolute top-8 right-8 text-slate-400 hover:text-slate-800 p-2 bg-slate-50 rounded-full transition-colors z-50">
-                  <X size={20} />
-               </button>
-               <div className="text-lg font-serif text-slate-700 leading-loose tracking-wide">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
-                    {viewingHistory}
-                  </ReactMarkdown>
-               </div>
-            </div>
-          ) : !currentQuery ? (
-            /* Welcome Screen (Only show this when no active query is present) */
-            <div className="flex-1 flex flex-col items-center justify-center text-center max-w-2xl px-6 opacity-60 mx-auto mt-32">
+          {messages.length === 0 ? (
+            /* Welcome Screen */
+            <div className="flex-1 flex flex-col items-center justify-center text-center max-w-2xl px-6 opacity-60 mx-auto mt-20">
               <Sparkles size={48} className="text-slate-300 mb-6 mx-auto" />
               <h1 className="text-3xl font-serif text-slate-800 mb-4">Strategic Council</h1>
-              <p className="text-slate-500 text-lg leading-relaxed">Present your case. The board members will sequentially analyze your strategy through their unique mental models.</p>
+              <p className="text-slate-500 text-lg leading-relaxed">Present your strategy. The board members will debate and analyze your proposal across multiple rounds.</p>
             </div>
           ) : (
-            <>
-              {/* Current Query Display (In Document Flow) */}
-              <div className="w-full text-center px-6 pb-8 border-b border-slate-200/50 mb-4">
-                 <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Topic Under Review</div>
-                 <h2 className="text-2xl font-serif text-slate-800 font-medium tracking-wide">"{currentQuery}"</h2>
-              </div>
+            <div className="w-full max-w-4xl mx-auto flex flex-col gap-10 mt-4">
+              
+              {messages.map((msg, index) => {
+                if (msg.role === 'user') {
+                  return (
+                    <motion.div 
+                      key={index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="w-full flex justify-end"
+                    >
+                      <div className="bg-slate-900 text-white p-6 rounded-[2rem] rounded-tr-sm max-w-[85%] shadow-md">
+                        <div className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+                           You <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                        </div>
+                        <div className="text-lg font-serif leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                      </div>
+                    </motion.div>
+                  );
+                }
 
-              <div className="w-full max-w-4xl mx-auto flex flex-col gap-16">
-                
-                {/* Sequential Director Speeches */}
-                {BOARD_MEMBERS.map(member => {
-                  const state = currentSession[member.id];
-                  const hasStarted = !!state;
-                  const isActive = state?.status === 'retrieving' || state?.status === 'speaking';
+                if (msg.role === 'assistant') {
+                  const member = BOARD_MEMBERS.find(m => m.id === msg.member_id);
+                  if (!member && msg.member_id !== 'system') return null;
                   
                   return (
                     <motion.div 
-                      key={member.id}
+                      key={index}
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                      className={`w-full bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-[2rem] p-10 shadow-sm transition-all duration-500 ${isActive ? 'ring-2 ring-offset-2 ring-indigo-100 shadow-md bg-white' : ''}`}
+                      className={`w-full bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-[2rem] p-10 shadow-sm transition-all duration-500 ${msg.member_id === currentStatus?.member_id ? 'ring-2 ring-offset-2 ring-indigo-100 shadow-md bg-white' : ''}`}
                     >
-                      {/* Speaker Header */}
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm">
-                            <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-serif font-bold text-slate-800">{member.name}</h3>
-                            <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{member.title}</div>
-                          </div>
-                        </div>
-                        
-                        {/* Status Badge */}
-                        {isActive && (
-                          <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse ${member.color} bg-slate-50 border border-current`}>
-                            <Loader2 size={10} className="animate-spin" />
-                            {state.status === 'retrieving' ? 'Retrieving Memory...' : 'Speaking...'}
-                          </span>
-                        )}
-                        
-                        {state?.status === 'done' && (
-                          <span className="flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 border border-emerald-200">
-                            <CheckCircle2 size={10} /> Done
-                          </span>
-                        )}
-                        
-                        {!hasStarted && (
-                          <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-slate-50 border border-slate-200">
-                            Queue
-                          </span>
+                      <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+                        {member ? (
+                          <>
+                            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                              <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-serif font-bold text-slate-800">{member.name}</h3>
+                              <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{member.title}</div>
+                            </div>
+                          </>
+                        ) : (
+                           <div>
+                              <h3 className="text-lg font-serif font-bold text-red-600">System Message</h3>
+                           </div>
                         )}
                       </div>
 
-                      {/* Speech Text Content */}
                       <div className="text-lg font-serif text-slate-700 leading-loose tracking-wide break-words">
-                        {!hasStarted ? (
-                          <div className="text-slate-400 italic text-sm flex items-center gap-2 py-4">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-ping" />
-                            Waiting to speak...
-                          </div>
-                        ) : state.status === 'retrieving' && !state.text ? (
-                          <div className="text-slate-400 italic text-sm flex items-center gap-2 py-4">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
+                          {msg.content || ''}
+                        </ReactMarkdown>
+                        {msg.member_id === currentStatus?.member_id && !msg.content && (
+                          <div className="text-slate-400 italic text-sm flex items-center gap-2 py-2 animate-pulse">
                             <Loader2 size={14} className="animate-spin text-slate-300" />
-                            {state.message || 'Retrieving Spearman Speeches & Checklists Grounding...'}
-                          </div>
-                        ) : (
-                          <div>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
-                              {state.text || ''}
-                            </ReactMarkdown>
-                            
-                            {state.status === 'speaking' && !state.text && (
-                              <div className="text-slate-400 italic text-sm flex items-center gap-2 py-4 animate-pulse">
-                                <Loader2 size={14} className="animate-spin text-slate-300" />
-                                Speaking...
-                              </div>
-                            )}
+                            Drafting response...
                           </div>
                         )}
                       </div>
 
                       {/* Grounding Quotes Inline Search Style Capsules */}
-                      {hasStarted && state.quotes && state.quotes.length > 0 && (
+                      {msg.quotes && msg.quotes.length > 0 && (
                         <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap items-center gap-3">
                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2 flex items-center gap-1">
-                            <BookOpen size={12} /> Speeches Grounding:
+                            <BookOpen size={12} /> References:
                           </span>
-                          {state.quotes.map((q, idx) => (
-                            <div 
-                              key={idx}
-                              className="group relative cursor-help"
-                            >
+                          {msg.quotes.map((q, idx) => (
+                            <div key={idx} className="group relative cursor-help">
                               <div className="bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200/80 hover:border-indigo-200 text-slate-500 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm">
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-indigo-400" />
                                 {q.source}
                               </div>
-                              
-                              {/* ABSOLUTE POSITIONED HIGH-END HOVER CARD TOOLTIP */}
                               <div className="absolute bottom-full left-0 mb-3 w-[360px] p-5 bg-slate-900/95 backdrop-blur-xl text-slate-200 text-xs rounded-[1.25rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-slate-800 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 pointer-events-none scale-95 origin-bottom-left group-hover:scale-100 flex flex-col gap-2">
-                                <div className="flex items-center gap-1.5 text-indigo-400 font-bold uppercase tracking-wider text-[10px]">
-                                  <BookOpen size={10} /> Speeches Citation
-                                </div>
-                                <div className="font-serif font-semibold text-white border-b border-slate-800 pb-2 mb-1 truncate text-xs" title={q.source}>
-                                  {q.source}
-                                </div>
-                                <p className="leading-relaxed font-serif italic text-slate-300 max-h-48 overflow-y-auto pr-1">
-                                  "{q.content}"
-                                </p>
+                                <div className="font-serif font-semibold text-white border-b border-slate-800 pb-2 mb-1 truncate text-xs" title={q.source}>{q.source}</div>
+                                <p className="leading-relaxed font-serif italic text-slate-300 max-h-48 overflow-y-auto pr-1">"{q.content}"</p>
                               </div>
                             </div>
                           ))}
@@ -481,65 +654,106 @@ export default function App() {
                       )}
                     </motion.div>
                   );
-                })}
+                }
 
-                {/* Final Secretary Resolution */}
-                {secretaryStatus !== 'idle' && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 50, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                    className="w-full bg-white border border-slate-200/80 shadow-[0_30px_100px_rgba(0,0,0,0.06)] rounded-[2.5rem] p-16 relative overflow-hidden"
-                  >
-                    {/* Decorative Elements */}
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-bl-full -z-10" />
-                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-50 rounded-tr-full -z-10" />
-                    
-                    <div className="flex items-center gap-4 mb-12 border-b border-slate-100 pb-8">
-                      <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg">
-                        <Sparkles size={24} />
+                if (msg.role === 'secretary') {
+                  return (
+                    <motion.div 
+                      key={index}
+                      initial={{ opacity: 0, y: 50, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      className="w-full bg-white border border-slate-200/80 shadow-[0_30px_100px_rgba(0,0,0,0.06)] rounded-[2.5rem] p-16 relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-bl-full -z-10" />
+                      <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-50 rounded-tr-full -z-10" />
+                      
+                      <div className="flex items-center gap-4 mb-12 border-b border-slate-100 pb-8">
+                        <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                          <FileSignature size={24} />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Executive Resolution</h2>
+                          <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">Chief Secretary's Report</div>
+                        </div>
                       </div>
-                      <div>
-                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Executive Resolution</h2>
-                        <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">Chief Secretary's Report</div>
-                      </div>
-                    </div>
 
-                    <div className="text-lg font-serif text-slate-700 leading-loose tracking-wide">
-                      {secretaryResolution ? (
+                      <div className="text-lg font-serif text-slate-700 leading-loose tracking-wide">
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
-                          {secretaryResolution}
+                          {msg.content}
                         </ReactMarkdown>
-                      ) : (
-                        <span className="flex items-center gap-2 text-indigo-500 animate-pulse font-sans text-sm uppercase tracking-widest font-bold">
-                          <Loader2 size={16} className="animate-spin" /> Synthesizing Board Consensus...
-                        </span>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-            </>
+                        {isSynthesizing && !msg.content && (
+                           <span className="flex items-center gap-2 text-indigo-500 animate-pulse font-sans text-sm uppercase tracking-widest font-bold">
+                             <Loader2 size={16} className="animate-spin" /> Synthesizing Board Consensus...
+                           </span>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                }
+
+                return null;
+              })}
+
+              {/* System Event Messages Display */}
+              {systemMsg && (
+                <div className="w-full text-center py-4">
+                  <span className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest shadow-sm">
+                    <Activity size={14} className="animate-pulse" /> {systemMsg}
+                  </span>
+                </div>
+              )}
+
+              {/* Synthesize Button at the end of the chat flow */}
+              {messages.length > 0 && !hasSecretaryResponse && !isProcessing && (
+                <div className="w-full flex justify-center py-8">
+                  <button 
+                    onClick={handleSynthesize}
+                    className="group relative flex items-center gap-3 bg-white hover:bg-slate-900 text-slate-800 hover:text-white px-8 py-4 rounded-full border border-slate-200 hover:border-slate-900 shadow-sm hover:shadow-xl transition-all duration-300"
+                  >
+                    <FileSignature size={20} className="text-indigo-500 group-hover:text-white transition-colors" />
+                    <span className="font-bold tracking-wide">Generate Executive Resolution</span>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </main>
 
-      {/* BOTTOM INPUT DOCK (In Document Flow) */}
-      <div className="w-full max-w-4xl mx-auto px-6 pb-8 pt-4 z-30">
-        <div className="bg-white/80 backdrop-blur-2xl border border-white rounded-[2rem] flex items-end shadow-[0_15px_50px_rgba(0,0,0,0.05)] p-3 relative transition-all">
-          
+      {/* BOTTOM INPUT DOCK */}
+      <div className="w-full max-w-4xl mx-auto px-6 pb-8 z-30 flex flex-col gap-3">
+        
+        {/* Fast / Pro Toggle Switch */}
+        <div className="flex justify-start px-2">
+          <div className="bg-white/80 backdrop-blur-md border border-slate-200 p-1 rounded-full flex items-center gap-1 shadow-sm">
+            <button
+              onClick={() => setMode('fast')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all ${mode === 'fast' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              <Zap size={14} /> Fast
+            </button>
+            <button
+              onClick={() => setMode('pro')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all ${mode === 'pro' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              <BrainCircuit size={14} /> Pro (Debate)
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white/90 backdrop-blur-2xl border border-white rounded-[2rem] flex items-end shadow-[0_15px_50px_rgba(0,0,0,0.05)] p-3 relative transition-all">
           <textarea 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isProcessing}
-            placeholder={isProcessing ? "Board is occupied..." : "Present your strategy to the board..."}
+            placeholder={isProcessing ? "Board is occupied..." : "Present your strategy or counter-argument..."}
             className="w-full bg-transparent text-slate-800 placeholder-slate-400 px-6 py-4 outline-none resize-none min-h-[60px] max-h-40 text-lg font-serif disabled:opacity-50"
             rows={1}
           />
           <button 
             onClick={handleSubmit}
-            disabled={!input.trim() || isProcessing}
+            disabled={!input.trim() || isProcessing || participatingMembers.length === 0}
             className="h-14 w-14 flex-shrink-0 bg-slate-900 text-white rounded-2xl flex items-center justify-center hover:bg-black transition-all shadow-[0_8px_20px_rgba(0,0,0,0.15)] m-1 disabled:opacity-50 disabled:shadow-none"
           >
             {isProcessing ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
