@@ -238,13 +238,13 @@ async def retrieve_hybrid(member_id: str, query: str, top_k: int = 3) -> list:
         
     has_chinese = bool(re.search(r'[\u4e00-\u9fa5]', query))
     
-    if has_chinese and member_id in ["buffett", "munger"]:
+    if has_chinese and member_id != "mao_zedong":
         try:
             # Quick translation using LLM
             res = await async_client.chat.completions.create(
                 model="mimo-v2.5",
                 messages=[
-                    {"role": "system", "content": "You are a professional translator. Translate the following Chinese business/investment query into English so that it can be used for RAG search on Warren Buffett or Charlie Munger's English texts. Focus on key business concepts and terminology. Return ONLY the English translation, no other text."},
+                    {"role": "system", "content": "You are a professional translator. Translate the following Chinese query into English so that it can be used for RAG search on English corporate, start-up, or philosophical texts. Focus on key concepts and terminology. Return ONLY the English translation, no other text."},
                     {"role": "user", "content": query}
                 ],
                 temperature=0.1,
