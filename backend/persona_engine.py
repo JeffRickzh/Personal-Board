@@ -44,6 +44,10 @@ class PersonaEngine:
         pdf_count = 0
         
         for root, _, files in os.walk(self.corpus_path):
+            # Skip highly sensitive post-1949 volumes for Mao Zedong to prevent API content safety filters
+            if any(x in root for x in ["005-", "006-", "007-", "第五卷", "第六卷", "第七卷"]):
+                continue
+                
             for file in files:
                 if file.endswith(".md") or file.endswith(".txt"):
                     file_path = os.path.join(root, file)

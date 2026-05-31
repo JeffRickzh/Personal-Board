@@ -176,21 +176,28 @@ def format_history_context(messages: list) -> str:
 client = OpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
 async_client = AsyncOpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
 
+mimo_semaphore = asyncio.Semaphore(1)
+
 async def chat_completion_with_retry(*args, **kwargs):
-    max_retries = 4
-    delay = 1.0
-    for attempt in range(max_retries):
-        try:
-            return await async_client.chat.completions.create(*args, **kwargs)
-        except Exception as e:
-            err_str = str(e)
-            if "429" in err_str or "rate limit" in err_str.lower() or "too many requests" in err_str.lower():
-                if attempt < max_retries - 1:
-                    print(f"MIMO API Rate limited (429), retrying in {delay}s (attempt {attempt+1}/{max_retries})...")
-                    await asyncio.sleep(delay)
-                    delay *= 2
-                    continue
-            raise e
+    import random
+    async with mimo_semaphore:
+        max_retries = 5
+        delay = 1.0
+        await asyncio.sleep(0.1) # basic inter-request cooling gap
+        for attempt in range(max_retries):
+            try:
+                return await async_client.chat.completions.create(*args, **kwargs)
+            except Exception as e:
+                err_str = str(e)
+                is_429 = "429" in err_str or "rate limit" in err_str.lower() or "too many requests" in err_str.lower() or "limitation" in err_str.lower()
+                if is_429:
+                    if attempt < max_retries - 1:
+                        sleep_time = delay + random.uniform(0.2, 1.0)
+                        print(f"MIMO API Rate limited (429), retrying in {sleep_time:.2f}s (attempt {attempt+1}/{max_retries})...")
+                        await asyncio.sleep(sleep_time)
+                        delay *= 2
+                        continue
+                raise e
 
 from typing import Optional, List, Any
 
