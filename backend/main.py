@@ -231,6 +231,50 @@ async def save_session_history(session_id: str, title_source: str, messages: lis
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+async def retrieve_hybrid(member_id: str, query: str, top_k: int = 3) -> list:
+    engine = ENGINES.get(member_id)
+    if not engine:
+        return []
+        
+    has_chinese = bool(re.search(r'[\u4e00-\u9fa5]', query))
+    
+    if has_chinese and member_id in ["buffett", "munger"]:
+        try:
+            # Quick translation using LLM
+            res = await async_client.chat.completions.create(
+                model="mimo-v2.5",
+                messages=[
+                    {"role": "system", "content": "You are a professional translator. Translate the following Chinese business/investment query into English so that it can be used for RAG search on Warren Buffett or Charlie Munger's English texts. Focus on key business concepts and terminology. Return ONLY the English translation, no other text."},
+                    {"role": "user", "content": query}
+                ],
+                temperature=0.1,
+                max_tokens=60
+            )
+            eng_query = res.choices[0].message.content.strip()
+            print(f"Hybrid Search for {member_id}: Translated '{query}' -> '{eng_query}'")
+            
+            # Retrieve Chinese matches (from skillmodel/Chinese speeches)
+            zh_matches = engine.retrieve(query, top_k=2)
+            
+            # Retrieve English matches (from English shareholder letters / speeches)
+            en_matches = engine.retrieve(eng_query, top_k=2)
+            
+            # Merge and deduplicate
+            merged = []
+            seen = set()
+            for chunk in zh_matches + en_matches:
+                chunk_id = (chunk.get("source"), chunk.get("content")[:50])
+                if chunk_id not in seen:
+                    seen.add(chunk_id)
+                    merged.append(chunk)
+            
+            return merged[:top_k]
+        except Exception as e:
+            print(f"Error in hybrid retrieval: {e}")
+            return engine.retrieve(query, top_k=top_k)
+            
+    return engine.retrieve(query, top_k=top_k)
+
 @app.post("/api/chat_stream")
 async def chat_with_board_stream(request: ChatRequest):
     async def event_generator():
@@ -259,7 +303,7 @@ async def chat_with_board_stream(request: ChatRequest):
             async def generate_draft(mid):
                 engine = ENGINES[mid]
                 persona = PERSONAS[mid]
-                retrieved = engine.retrieve(latest_user_message, top_k=2)
+                retrieved = await retrieve_hybrid(mid, latest_user_message, top_k=2)
                 quotes_dict[mid] = retrieved
                 
                 draft_prompt = build_lattice_prompt(persona, retrieved, previous_context, qa_shots=qa_shots_dict.get(mid))
@@ -307,7 +351,7 @@ async def chat_with_board_stream(request: ChatRequest):
                 system_prompt = build_lattice_prompt(persona, retrieved, previous_context, debate_drafts=other_drafts, qa_shots=qa_shots_dict.get(member_id))
             else:
                 # FAST MODE
-                retrieved = engine.retrieve(latest_user_message, top_k=3)
+                retrieved = await retrieve_hybrid(member_id, latest_user_message, top_k=3)
                 system_prompt = build_lattice_prompt(persona, retrieved, previous_context, qa_shots=qa_shots_dict.get(member_id))
             
             yield f"data: {json.dumps({'event': 'quotes', 'member_id': member_id, 'quotes': retrieved}, ensure_ascii=False)}\n\n"
