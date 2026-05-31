@@ -507,7 +507,7 @@ export default function App() {
   const hasSecretaryResponse = messages.length > 0 && messages[messages.length - 1].role === 'secretary';
 
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-50 overflow-hidden relative font-sans selection:bg-indigo-100">
+    <div className="flex flex-col h-[100dvh] w-full bg-slate-50 overflow-hidden relative font-sans selection:bg-indigo-100">
       
       {/* Abstract Ambient Background */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
@@ -515,40 +515,43 @@ export default function App() {
         <div className="absolute top-[40%] -right-[10%] w-[40%] h-[60%] bg-amber-100/40 rounded-full blur-[100px]" />
       </div>
 
-      {/* TOP LEFT: History Drawer Button & New Chat */}
-      <div className="absolute top-4 left-4 md:top-8 md:left-8 z-50 flex gap-2 md:gap-3">
-        <button 
-          onClick={() => setIsDrawerOpen(true)}
-          className="flex items-center gap-1 md:gap-2 bg-white/80 hover:bg-white text-slate-700 px-3 py-2 md:px-5 md:py-3 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
-        >
-          <Clock size={16} className="md:w-[18px] md:h-[18px]" />
-          <span className="text-[10px] md:text-sm font-bold tracking-widest uppercase text-slate-500">Records</span>
-        </button>
-        {messages.length > 0 && (
+      {/* TOP BAR (Records & Export) */}
+      <div className="w-full flex justify-between items-start p-3 md:p-8 z-50 absolute top-0 left-0 pointer-events-none">
+        {/* Left: History & New Chat */}
+        <div className="flex gap-2 md:gap-3 pointer-events-auto">
           <button 
-            onClick={() => { setMessages([]); setSessionId(''); }}
-            className="flex items-center justify-center bg-white/80 hover:bg-white text-slate-500 hover:text-indigo-600 px-3 py-2 md:w-12 md:h-12 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
-            title="New Council Session"
+            onClick={() => setIsDrawerOpen(true)}
+            className="flex items-center gap-1 md:gap-2 bg-white/80 hover:bg-white text-slate-700 px-3 py-2 md:px-5 md:py-3 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
           >
-            <Sparkles size={16} className="md:w-[18px] md:h-[18px]" />
-            <span className="text-[10px] md:hidden font-bold tracking-widest uppercase text-slate-500 ml-1">New</span>
+            <Clock size={16} className="md:w-[18px] md:h-[18px]" />
+            <span className="text-[10px] md:text-sm font-bold tracking-widest uppercase text-slate-500">Records</span>
           </button>
-        )}
-      </div>
-
-      {/* TOP RIGHT: One-click Download / Export MD */}
-      {messages.length > 0 && (
-        <div className="absolute top-4 right-4 md:top-8 md:right-8 z-50">
-          <button 
-            onClick={handleExportMarkdown}
-            className="flex items-center gap-1 md:gap-2 bg-slate-900 hover:bg-black text-white px-3 py-2 md:px-5 md:py-3 rounded-full border border-slate-800 shadow-md transition-all active:scale-95 duration-150"
-            title="Export Session as Markdown"
-          >
-            <Download size={16} className="md:w-[18px] md:h-[18px]" />
-            <span className="text-[10px] md:text-sm font-bold tracking-widest uppercase">Export MD</span>
-          </button>
+          {messages.length > 0 && (
+            <button 
+              onClick={() => { setMessages([]); setSessionId(''); }}
+              className="flex items-center justify-center bg-white/80 hover:bg-white text-slate-500 hover:text-indigo-600 px-3 py-2 md:w-12 md:h-12 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
+              title="New Council Session"
+            >
+              <Sparkles size={16} className="md:w-[18px] md:h-[18px]" />
+              <span className="text-[10px] md:hidden font-bold tracking-widest uppercase text-slate-500 ml-1">New</span>
+            </button>
+          )}
         </div>
-      )}
+
+        {/* Right: Export MD */}
+        <div className="pointer-events-auto">
+          {messages.length > 0 && (
+            <button 
+              onClick={handleExportMarkdown}
+              className="flex items-center gap-1 md:gap-2 bg-slate-900 hover:bg-black text-white px-3 py-2 md:px-5 md:py-3 rounded-full border border-slate-800 shadow-md transition-all active:scale-95 duration-150"
+              title="Export Session as Markdown"
+            >
+              <Download size={16} className="md:w-[18px] md:h-[18px]" />
+              <span className="text-[10px] md:text-sm font-bold tracking-widest uppercase">Export MD</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* History Drawer */}
       <AnimatePresence>
@@ -595,7 +598,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* HEADER: The Council Ring */}
-      <header className={`w-full flex justify-center items-center z-10 transition-all duration-500 px-2 ${isHeaderCollapsed ? 'py-2 md:py-4' : 'py-4 md:py-10'}`}>
+      <header className={`w-full flex justify-center items-center z-10 transition-all duration-500 px-2 mt-16 md:mt-8 ${isHeaderCollapsed ? 'py-2 md:py-4' : 'py-4 md:py-10'}`}>
         <div className={`relative flex items-center justify-center bg-white/50 backdrop-blur-xl border border-slate-200/60 shadow-sm transition-all duration-500 ${isHeaderCollapsed ? 'px-4 md:px-8 py-2 md:py-3.5 gap-2 md:gap-6 rounded-[2rem]' : 'px-1 sm:px-4 md:px-12 py-3 md:py-6 gap-0 sm:gap-4 md:gap-12 rounded-[2rem] md:rounded-[3rem]'}`}>
           {BOARD_MEMBERS.map(member => {
             const isParticipating = participatingMembers.includes(member.id);
@@ -649,7 +652,7 @@ export default function App() {
       {/* MIDDLE: Focus Stage & Chat History */}
       <main className="flex-1 overflow-hidden relative z-10 w-full flex flex-col items-center">
         
-        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 w-full max-w-5xl overflow-y-auto px-4 md:px-8 pb-12 scrollbar-hide flex flex-col gap-6 md:gap-8">
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 w-full max-w-5xl overflow-y-auto overflow-x-hidden px-4 md:px-8 pb-12 scrollbar-hide flex flex-col gap-6 md:gap-8">
           
           {messages.length === 0 ? (
             /* Welcome Screen */
