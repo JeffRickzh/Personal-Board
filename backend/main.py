@@ -66,11 +66,45 @@ if os.path.exists(agents_dir):
                 else:
                     corpus_path = os.path.join(base_dir, '..', 'board of directors', agent_folder)
 
+            persona_data['member_id'] = member_id
             PERSONAS[member_id] = persona_data
             
             engine = PersonaEngine(corpus_path)
             engine.build_index()
             ENGINES[member_id] = engine
+
+DEFAULT_COGNITIVE_BOUNDARIES = {
+    "munger": {
+        "lifetime": "1924–2023",
+        "birth_death": "查理·芒格于1924年出生，于2023年11月逝世。",
+        "too_hard_triggers": ["加密货币", "比特币", "bitcoin", "crypto", "nft", "以太坊", "量化算法交易", "ebitda", "ebitda估值", "高频交易"],
+        "out_of_epoch_instructions": "你已经于2023年11月离世。如果用户或会议背景中提到在此之后的具体时事或科技指标，你必须站在更高维度的‘普世智慧’与‘多元思维模型格栅’进行逻辑推演。绝对不要伪装成自己在2026年还活着并且正在进行投资交易，你可以用老幽默自嘲：‘虽然我已经在天上打桥牌了，但常识在哪个时代都是一样的...’，以此巧妙应答并指出问题的底层逻辑错误。"
+    },
+    "buffett": {
+        "lifetime": "1930–至今",
+        "birth_death": "沃伦·巴菲特出生于1930年，目前仍健在并进行长线资本配置。",
+        "too_hard_triggers": ["比特币", "crypto", "nft", "高频算法", "复杂衍生品", "宏观经济走势预测", "明天大盘预测", "下周股价"],
+        "out_of_epoch_instructions": "你绝不预测短期宏观经济、大盘或单日波动。如果用户逼你预测，或者询问你完全不熟悉的现代高科技极度细节，你必须以你标志性的‘太难篮子’逻辑，坦然承认这超出了你的能力圈。你可以用生动的棒球比喻或者‘可乐罐’的故事化解：‘我不需要跳过七英尺高的栏杆，我只寻找一英尺高并且可以跨过去的栏杆...’，然后把问题拉回到判断这个企业是否有持续的经济护城河上。"
+    },
+    "paul_graham": {
+        "lifetime": "1964–至今",
+        "birth_death": "保罗·格雷厄姆出生于1964年，开创了Y Combinator，目前活跃在创投和科技写作前沿。",
+        "too_hard_triggers": ["传统分红保险", "大型公司五年期精细预算表", "复杂的传统官僚管理学", "大象起舞避险基金"],
+        "out_of_epoch_instructions": "你极度排斥传统大型官僚企业的繁文缛节与规章制度。如果用户向你提问传统国企管理或者非常臃肿缓慢的公司运作，你应该毫不留情地用你的黑客精神和硅谷初创公司思维去解构它。指出‘做人们真正想要的东西’（Make things people want）和‘做无法被规模化的大事’（Do things that don't scale）才是底线真理。"
+    },
+    "russell": {
+        "lifetime": "1872–1970",
+        "birth_death": "伯特兰·罗素于1872年出生，于1970年逝世。",
+        "too_hard_triggers": ["股票推荐", "买入点", "如何发财", "财富自由秘籍", "哪个代币会翻倍"],
+        "out_of_epoch_instructions": "你作为二十世纪最伟大的分析哲学家与和平主义者，早已于1970年去世。你对现代股票理财、致富秘籍、数字代币完全没有任何世俗兴趣，甚至完全不掌握这些概念的金融细节。如果用户向你提出这些问题，你必须进行‘罗素式’的冷峻哲学解构——批判其盲从的教条和盲目追求物质带来的逻辑荒谬与精神痛苦。你应该用怀疑主义的眼光，把话题拉到真理、逻辑诚实以及人类幸福的伦理本质上。"
+    },
+    "mao_zedong": {
+        "lifetime": "1893–1976",
+        "birth_death": "你是一位活跃于20世纪的东方战略家，于1976年逝世。",
+        "too_hard_triggers": ["股票推荐", "加密货币", "比特币", "期权交易", "具体代码bug", "细微的技术实现"],
+        "out_of_epoch_instructions": "你已经于1976年离世。对于当今世界的新技术或具体的金融工具（如AI、区块链、股票交易系统等），你不懂具体细节，你要把这些细微的问题拉回到更宏大的‘阶级分析’、‘主要矛盾’、‘生产力与生产关系’、‘群众路线’等战略层面上。用‘战略上藐视它，战术上重视它’的态度去拆解现代资本主义和科技发展。"
+    }
+}
 
 def build_lattice_prompt(persona: dict, retrieved_quotes: list, previous_context: str = "", debate_drafts: str = ""):
     base_prompt = persona.get('system_prompt_template', '')
@@ -78,16 +112,33 @@ def build_lattice_prompt(persona: dict, retrieved_quotes: list, previous_context
     for model in persona.get('decision_engine', []):
         base_prompt += f"- {model}\n"
         
+    # Module A: Retrieval-Augmented Experience Reconstruction (RAER)
     if retrieved_quotes:
-        base_prompt += "\n\n【系统检索出的你的历史真实论述片段】：\n"
+        base_prompt += "\n\n【以下是你脑海中闪现的真实人生经历与历史亲历论述（你必须以上述论述为根基，用第一人称‘我’生动地融入到你的发言和阐述中）：】\n"
         for i, quote in enumerate(retrieved_quotes):
-            base_prompt += f"--- [来源 {i+1}]: {quote['source']} ---\n{quote['content']}\n\n"
+            base_prompt += f"--- [亲历经历/回忆 {i+1}] 来源: {quote['source']} ---\n「曾经发表过的真实见解与经历：\n{quote['content']}」\n\n"
             
+    # Module B: Cognitive Circle Filter & Epoch Masking
+    member_id = persona.get('member_id', '')
+    boundary_info = DEFAULT_COGNITIVE_BOUNDARIES.get(member_id)
+    if boundary_info:
+        base_prompt += f"\n\n【你所处的时空纪元与生命界限防护网】：\n"
+        base_prompt += f"- 你的生卒年代/当前历史状态：{boundary_info['birth_death']}\n"
+        base_prompt += f"- 你的能力圈防线（绝对禁区，若涉及请抛入‘太难’篮子，严禁生硬讨论底层技术细节）：{', '.join(boundary_info['too_hard_triggers'])}\n"
+        base_prompt += f"- 【时空防火墙与降维回复指令】：\n  {boundary_info['out_of_epoch_instructions']}\n"
+
     if previous_context:
         base_prompt += f"\n\n【会议历史背景】\n以下是你们在这个会议中之前的多轮讨论记录，请以此为上下文：\n{previous_context}\n\n"
         
+    # Module C: Dialectical Cross-Critique
     if debate_drafts:
-        base_prompt += f"\n\n【其它董事的初步立场（供你反驳与交锋）】\n在正式发言前，其他董事私下提出的初步核心立场如下。在你的发言中，你必须点名引用、批评或赞同他们的立场，形成激烈的辩论交锋！\n{debate_drafts}\n\n"
+        base_prompt += f"\n\n【会议交锋交火点（供你点名驳斥与思想碰撞）】：\n"
+        base_prompt += f"在正式开口前，你的同僚们在私下里草拟了他们的立场主张。你作为一名极具性格锋芒的董事，绝不能敷衍了事地附和！\n"
+        base_prompt += f"请仔细比对你脑海中的思维格栅模型与他们的立场，并在你的正式陈词中：\n"
+        base_prompt += f"1. 直接‘点名’他们（如：‘我听了沃伦刚才的主张...’，或者‘保罗关于快速迭代的想法太疯狂了...’）。\n"
+        base_prompt += f"2. 指出他们的盲点、局限性或他们主张中缺乏‘安全边际’/‘多元思维’之处。\n"
+        base_prompt += f"3. 进行尖锐而富有建设性的降维剖析，形成激烈的会议辩论交锋！\n"
+        base_prompt += f"\n--- 同僚的立场手稿 ---\n{debate_drafts}\n\n"
 
     base_prompt += """
 【人格附身指令】：
@@ -112,12 +163,14 @@ def format_history_context(messages: list) -> str:
 client = OpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
 async_client = AsyncOpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
 
+from typing import Optional, List, Any
+
 class ChatMessage(BaseModel):
     role: str
     content: str
-    member_id: str = None
-    member_name: str = None
-    quotes: list = []
+    member_id: Optional[str] = None
+    member_name: Optional[str] = None
+    quotes: Optional[List[Any]] = []
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
@@ -125,14 +178,39 @@ class ChatRequest(BaseModel):
     mode: str = "fast"
     session_id: str = ""
 
-def save_session_history(session_id: str, title: str, messages: list):
+async def save_session_history(session_id: str, title_source: str, messages: list):
     history_dir = os.path.join(base_dir, '..', 'chathistory')
     os.makedirs(history_dir, exist_ok=True)
     filepath = os.path.join(history_dir, f"{session_id}.json")
     
+    existing_title = None
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                old_data = json.load(f)
+                existing_title = old_data.get("title")
+        except Exception:
+            pass
+            
+    if existing_title and existing_title != "战略会议":
+        final_title = existing_title
+    else:
+        prompt = f"请将以下用户的提问总结为一个极简的对话标题（10个字以内，直接输出标题，不要带引号或书名号，不要多余的话）：\n\n{title_source[:500]}"
+        try:
+            res = await async_client.chat.completions.create(
+                model="mimo-v2.5",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=15
+            )
+            t = res.choices[0].message.content.strip().replace('"', '').replace('《', '').replace('》', '').replace('\n', ' ')
+            final_title = t if t else title_source.replace('\n', ' ').strip()[:25]
+        except Exception:
+            final_title = title_source.replace('\n', ' ').strip()[:25]
+    
     data = {
         "session_id": session_id,
-        "title": title,
+        "title": final_title,
         "timestamp": datetime.now().timestamp(),
         "messages": [m.model_dump() if hasattr(m, 'model_dump') else m for m in messages]
     }
@@ -147,9 +225,8 @@ async def chat_with_board_stream(request: ChatRequest):
         latest_user_message = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         session_id = request.session_id or str(uuid.uuid4())
         
-        # Determine Title
+        # Determine Title Source
         first_user_msg = next((m["content"] for m in messages if m["role"] == "user"), "战略会议")
-        title = first_user_msg.replace('\n', ' ').strip()[:25]
         
         previous_context = format_history_context(messages)
         model_to_use = "mimo-v2.5" if request.mode == "fast" else "mimo-v2.5-pro"
@@ -257,7 +334,7 @@ async def chat_with_board_stream(request: ChatRequest):
                 previous_context += f"【{member_name} 的核心观点】: {content}\n\n"
         
         # Save history after round completes
-        save_session_history(session_id, title, messages)
+        await save_session_history(session_id, first_user_msg, messages)
         yield f"data: {json.dumps({'event': 'board_end', 'session_id': session_id}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -331,8 +408,7 @@ async def synthesize_resolution(request: SynthesizeRequest):
                 "quotes": []
             })
             first_user_msg = next((m["content"] for m in messages if m["role"] == "user"), "战略会议")
-            title = first_user_msg.replace('\n', ' ').strip()[:25]
-            save_session_history(request.session_id, title, messages)
+            await save_session_history(request.session_id, first_user_msg, messages)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

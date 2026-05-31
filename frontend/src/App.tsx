@@ -9,6 +9,7 @@ import mungerPhoto from './assets/munger.png';
 import buffettPhoto from './assets/buffett.png';
 import grahamPhoto from './assets/graham.png';
 import russellPhoto from './assets/russell.png';
+import maoZedongPhoto from './assets/mao_zedong.png';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8080';
 
@@ -17,6 +18,7 @@ const BOARD_MEMBERS = [
   { id: 'buffett', name: 'Warren Buffett', title: 'Chairman', photo: buffettPhoto, color: 'text-emerald-600', border: 'border-emerald-400', ring: 'ring-emerald-200' },
   { id: 'paul_graham', name: 'Paul Graham', title: 'Advisor', photo: grahamPhoto, color: 'text-indigo-600', border: 'border-indigo-400', ring: 'ring-indigo-200' },
   { id: 'russell', name: 'Bertrand Russell', title: 'Philosopher', photo: russellPhoto, color: 'text-slate-600', border: 'border-slate-400', ring: 'ring-slate-200' },
+  { id: 'mao_zedong', name: 'Mao Zedong', title: 'Strategic Mentor', photo: maoZedongPhoto, color: 'text-red-600', border: 'border-red-400', ring: 'ring-red-200' },
 ];
 
 interface ChatMessage {
@@ -71,6 +73,15 @@ export default function App() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef<boolean>(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [input]);
 
   const handleScroll = () => {
     if (scrollRef.current) {
@@ -743,12 +754,13 @@ export default function App() {
 
         <div className="bg-white/90 backdrop-blur-2xl border border-white rounded-[2rem] flex items-end shadow-[0_15px_50px_rgba(0,0,0,0.05)] p-3 relative transition-all">
           <textarea 
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isProcessing}
             placeholder={isProcessing ? "Board is occupied..." : "Present your strategy or counter-argument..."}
-            className="w-full bg-transparent text-slate-800 placeholder-slate-400 px-6 py-4 outline-none resize-none min-h-[60px] max-h-40 text-lg font-serif disabled:opacity-50"
+            className="w-full bg-transparent text-slate-800 placeholder-slate-400 px-6 py-4 outline-none resize-none min-h-[60px] max-h-[300px] overflow-y-auto text-lg font-serif disabled:opacity-50"
             rows={1}
           />
           <button 
