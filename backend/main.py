@@ -176,6 +176,22 @@ def format_history_context(messages: list) -> str:
 client = OpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
 async_client = AsyncOpenAI(api_key=MIMO_API_KEY, base_url=MIMO_BASE_URL)
 
+async def chat_completion_with_retry(*args, **kwargs):
+    max_retries = 4
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            return await async_client.chat.completions.create(*args, **kwargs)
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "rate limit" in err_str.lower() or "too many requests" in err_str.lower():
+                if attempt < max_retries - 1:
+                    print(f"MIMO API Rate limited (429), retrying in {delay}s (attempt {attempt+1}/{max_retries})...")
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                    continue
+            raise e
+
 from typing import Optional, List, Any
 
 class ChatMessage(BaseModel):
@@ -210,7 +226,7 @@ async def save_session_history(session_id: str, title_source: str, messages: lis
     else:
         prompt = f"请将以下用户的提问总结为一个极简的对话标题（10个字以内，直接输出标题，不要带引号或书名号，不要多余的话）：\n\n{title_source[:500]}"
         try:
-            res = await async_client.chat.completions.create(
+            res = await chat_completion_with_retry(
                 model="mimo-v2.5",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
@@ -231,48 +247,29 @@ async def save_session_history(session_id: str, title_source: str, messages: lis
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-async def retrieve_hybrid(member_id: str, query: str, top_k: int = 3) -> list:
+def retrieve_hybrid(member_id: str, query: str, translated_query: str = "", top_k: int = 3) -> list:
     engine = ENGINES.get(member_id)
     if not engine:
         return []
         
-    has_chinese = bool(re.search(r'[\u4e00-\u9fa5]', query))
-    
-    if has_chinese and member_id != "mao_zedong":
-        try:
-            # Quick translation using LLM
-            res = await async_client.chat.completions.create(
-                model="mimo-v2.5",
-                messages=[
-                    {"role": "system", "content": "You are a professional translator. Translate the following Chinese query into English so that it can be used for RAG search on English corporate, start-up, or philosophical texts. Focus on key concepts and terminology. Return ONLY the English translation, no other text."},
-                    {"role": "user", "content": query}
-                ],
-                temperature=0.1,
-                max_tokens=60
-            )
-            eng_query = res.choices[0].message.content.strip()
-            print(f"Hybrid Search for {member_id}: Translated '{query}' -> '{eng_query}'")
-            
-            # Retrieve Chinese matches (from skillmodel/Chinese speeches)
-            zh_matches = engine.retrieve(query, top_k=2)
-            
-            # Retrieve English matches (from English shareholder letters / speeches)
-            en_matches = engine.retrieve(eng_query, top_k=2)
-            
-            # Merge and deduplicate
-            merged = []
-            seen = set()
-            for chunk in zh_matches + en_matches:
-                chunk_id = (chunk.get("source"), chunk.get("content")[:50])
-                if chunk_id not in seen:
-                    seen.add(chunk_id)
-                    merged.append(chunk)
-            
-            return merged[:top_k]
-        except Exception as e:
-            print(f"Error in hybrid retrieval: {e}")
-            return engine.retrieve(query, top_k=top_k)
-            
+    if translated_query and member_id != "mao_zedong":
+        # Retrieve Chinese matches (from skillmodel/Chinese speeches)
+        zh_matches = engine.retrieve(query, top_k=2)
+        
+        # Retrieve English matches (using the pre-translated query)
+        en_matches = engine.retrieve(translated_query, top_k=2)
+        
+        # Merge and deduplicate
+        merged = []
+        seen = set()
+        for chunk in zh_matches + en_matches:
+            chunk_id = (chunk.get("source"), chunk.get("content")[:50])
+            if chunk_id not in seen:
+                seen.add(chunk_id)
+                merged.append(chunk)
+        
+        return merged[:top_k]
+        
     return engine.retrieve(query, top_k=top_k)
 
 @app.post("/api/chat_stream")
@@ -287,6 +284,25 @@ async def chat_with_board_stream(request: ChatRequest):
         
         previous_context = format_history_context(messages)
         model_to_use = "mimo-v2.5" if request.mode == "fast" else "mimo-v2.5-pro"
+        
+        # Translate Chinese query ONCE globally to prevent redundant API calls
+        translated_query = ""
+        has_chinese = bool(re.search(r'[\u4e00-\u9fa5]', latest_user_message))
+        if has_chinese:
+            try:
+                res = await chat_completion_with_retry(
+                    model="mimo-v2.5",
+                    messages=[
+                        {"role": "system", "content": "You are a professional translator. Translate the following Chinese query into English so that it can be used for RAG search on English corporate, start-up, or philosophical texts. Focus on key concepts and terminology. Return ONLY the English translation, no other text."},
+                        {"role": "user", "content": latest_user_message}
+                    ],
+                    temperature=0.1,
+                    max_tokens=60
+                )
+                translated_query = res.choices[0].message.content.strip()
+                print(f"Global Query Translation: '{latest_user_message}' -> '{translated_query}'")
+            except Exception as e:
+                print(f"Global Query Translation failed: {e}")
         
         debate_drafts_dict = {}
         quotes_dict = {}
@@ -303,14 +319,14 @@ async def chat_with_board_stream(request: ChatRequest):
             async def generate_draft(mid):
                 engine = ENGINES[mid]
                 persona = PERSONAS[mid]
-                retrieved = await retrieve_hybrid(mid, latest_user_message, top_k=2)
+                retrieved = retrieve_hybrid(mid, latest_user_message, translated_query, top_k=2)
                 quotes_dict[mid] = retrieved
                 
                 draft_prompt = build_lattice_prompt(persona, retrieved, previous_context, qa_shots=qa_shots_dict.get(mid))
                 draft_prompt += "\n【额外指令】：这是一份内部手稿。请用简短的150字以内概括你对这个问题的核心判断，以供其他董事参考。"
                 
                 try:
-                    res = await async_client.chat.completions.create(
+                    res = await chat_completion_with_retry(
                         model=model_to_use,
                         messages=[{"role": "system", "content": draft_prompt}, {"role": "user", "content": latest_user_message}],
                         temperature=0.6,
@@ -351,7 +367,7 @@ async def chat_with_board_stream(request: ChatRequest):
                 system_prompt = build_lattice_prompt(persona, retrieved, previous_context, debate_drafts=other_drafts, qa_shots=qa_shots_dict.get(member_id))
             else:
                 # FAST MODE
-                retrieved = await retrieve_hybrid(member_id, latest_user_message, top_k=3)
+                retrieved = retrieve_hybrid(member_id, latest_user_message, translated_query, top_k=3)
                 system_prompt = build_lattice_prompt(persona, retrieved, previous_context, qa_shots=qa_shots_dict.get(member_id))
             
             yield f"data: {json.dumps({'event': 'quotes', 'member_id': member_id, 'quotes': retrieved}, ensure_ascii=False)}\n\n"
@@ -359,7 +375,7 @@ async def chat_with_board_stream(request: ChatRequest):
             
             content = ""
             try:
-                response = await async_client.chat.completions.create(
+                response = await chat_completion_with_retry(
                     model=model_to_use,
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -441,7 +457,7 @@ async def synthesize_resolution(request: SynthesizeRequest):
         
         full_resolution = ""
         try:
-            synth_res = await async_client.chat.completions.create(
+            synth_res = await chat_completion_with_retry(
                 model="mimo-v2.5-pro", # Always use pro for synthesis
                 messages=[{"role": "user", "content": synthesis_prompt}],
                 temperature=0.3,
