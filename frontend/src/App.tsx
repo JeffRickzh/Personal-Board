@@ -14,6 +14,17 @@ import maoZedongPhoto from './assets/mao_zedong.png';
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8080';
 const isLocalEnv = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
+const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 const BOARD_MEMBERS = [
   { id: 'buffett', name: 'Warren Buffett', title: 'Chairman', photo: buffettPhoto, color: 'text-emerald-600', border: 'border-emerald-400', ring: 'ring-emerald-200' },
   { id: 'munger', name: 'Charlie Munger', title: 'Vice Chairman', photo: mungerPhoto, color: 'text-amber-600', border: 'border-amber-400', ring: 'ring-amber-200' },
@@ -235,7 +246,7 @@ export default function App() {
     shouldAutoScrollRef.current = true;
     
     // Create new session ID if it's the very first message
-    const currentSessionId = sessionId || crypto.randomUUID();
+    const currentSessionId = sessionId || generateUUID();
     if (!sessionId) setSessionId(currentSessionId);
 
     const newMessages: ChatMessage[] = [...messages, { role: 'user', content: query }];

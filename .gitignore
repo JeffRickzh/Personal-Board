@@ -26,6 +26,10 @@ config.json
 chathistory/
 /chathistory/*.md
 
+# Curation state & datasets
+backend/*_checkpoint.json
+backend/*_backup.jsonl
+
 # IDEs/Editors
 .vscode/
 .idea/
