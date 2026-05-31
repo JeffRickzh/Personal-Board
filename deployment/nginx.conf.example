@@ -1,0 +1,26 @@
+server {
+    listen 80;
+    server_name _; # 允许通过 IP 直接访问
+
+    # 前端静态文件代理
+    location / {
+        root /var/www/personal-board/frontend/dist;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 后端 API 代理
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        
+        # 禁用缓存以支持 SSE 流式输出
+        proxy_cache off;
+        proxy_buffering off;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}

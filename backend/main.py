@@ -260,22 +260,9 @@ def retrieve_hybrid(member_id: str, query: str, translated_query: str = "", top_
         return []
         
     if translated_query and member_id != "mao_zedong":
-        # Retrieve Chinese matches (from skillmodel/Chinese speeches)
-        zh_matches = engine.retrieve(query, top_k=2)
-        
-        # Retrieve English matches (using the pre-translated query)
-        en_matches = engine.retrieve(translated_query, top_k=2)
-        
-        # Merge and deduplicate
-        merged = []
-        seen = set()
-        for chunk in zh_matches + en_matches:
-            chunk_id = (chunk.get("source"), chunk.get("content")[:50])
-            if chunk_id not in seen:
-                seen.add(chunk_id)
-                merged.append(chunk)
-        
-        return merged[:top_k]
+        # For English-corpus members (Buffett, Munger, Graham, Russell), search using the English translated query.
+        # This completely avoids Chinese-English zero-match token collisions and 1956 Agreement fallback pollution.
+        return engine.retrieve(translated_query, top_k=top_k)
         
     return engine.retrieve(query, top_k=top_k)
 
