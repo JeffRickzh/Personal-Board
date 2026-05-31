@@ -279,3 +279,137 @@ class PersonaEngine:
                     results.append(c)
                     
         return results
+
+import json
+
+class QAEngine:
+    def __init__(self, jsonl_path: str):
+        self.jsonl_path = jsonl_path
+        self.qa_pairs: List[Dict[str, str]] = [] # list of {"instruction": "...", "output": "...", "meta": {...}}
+        self.idf: Dict[str, float] = {}
+        self.doc_vectors: List[Dict[str, float]] = []
+        self.is_indexed = False
+        
+    def tokenize(self, text: str) -> List[str]:
+        text = text.lower()
+        words = re.findall(r'[\u4e00-\u9fa5]+|[a-z0-9]+', text)
+        tokens = []
+        for word in words:
+            if re.match(r'[\u4e00-\u9fa5]+', word):
+                for i in range(len(word)):
+                    tokens.append(word[i])
+                    if i < len(word) - 1:
+                        tokens.append(word[i:i+2])
+            else:
+                tokens.append(word)
+        return tokens
+
+    def load_and_index(self):
+        if not os.path.exists(self.jsonl_path):
+            return
+
+        try:
+            with open(self.jsonl_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        data = json.loads(line)
+                        self.qa_pairs.append(data)
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Error loading {self.jsonl_path}: {e}")
+            return
+            
+        if not self.qa_pairs:
+            print(f"QA Engine [{os.path.basename(self.jsonl_path)}]: No QA pairs found, skipping index.")
+            return
+
+        doc_count = len(self.qa_pairs)
+        df: Dict[str, int] = {}
+        
+        chunk_tokens: List[List[str]] = []
+        for qa in self.qa_pairs:
+            # We index both instruction and output to capture semantic overlap
+            content = qa.get("instruction", "") + " " + qa.get("output", "")
+            tokens = self.tokenize(content)
+            chunk_tokens.append(tokens)
+            unique_tokens = set(tokens)
+            for token in unique_tokens:
+                df[token] = df.get(token, 0) + 1
+                
+        for token, count in df.items():
+            self.idf[token] = math.log((doc_count + 1) / (count + 0.5)) + 1
+            
+        for tokens in chunk_tokens:
+            tf: Dict[str, float] = {}
+            for token in tokens:
+                tf[token] = tf.get(token, 0) + 1
+                
+            tfidf_vector: Dict[str, float] = {}
+            for token, count in tf.items():
+                tfidf_vector[token] = count * self.idf[token]
+                
+            norm = math.sqrt(sum(v * v for v in tfidf_vector.values()))
+            if norm > 0:
+                normalized_vector = {k: v / norm for k, v in tfidf_vector.items()}
+            else:
+                normalized_vector = tfidf_vector
+                
+            self.doc_vectors.append(normalized_vector)
+            
+        self.is_indexed = True
+        print(f"QA Engine [{os.path.basename(self.jsonl_path)}]: Successfully indexed {len(self.qa_pairs)} QA pairs.")
+
+    def retrieve(self, query: str, top_k: int = 2) -> List[Dict[str, str]]:
+        if not self.is_indexed:
+            self.load_and_index()
+            
+        if not self.qa_pairs:
+            return []
+            
+        query_tokens = self.tokenize(query)
+        if not query_tokens:
+            import random
+            if len(self.qa_pairs) > top_k:
+                return random.sample(self.qa_pairs, top_k)
+            return self.qa_pairs
+            
+        query_tf: Dict[str, float] = {}
+        for token in query_tokens:
+            query_tf[token] = query_tf.get(token, 0) + 1
+            
+        query_vector: Dict[str, float] = {}
+        for token, count in query_tf.items():
+            if token in self.idf:
+                query_vector[token] = count * self.idf[token]
+                
+        query_norm = math.sqrt(sum(v * v for v in query_vector.values()))
+        if query_norm > 0:
+            query_vector = {k: v / query_norm for k, v in query_vector.items()}
+            
+        scores: List[Tuple[int, float]] = []
+        for idx, doc_vector in enumerate(self.doc_vectors):
+            score = 0.0
+            for token, q_val in query_vector.items():
+                if token in doc_vector:
+                    score += q_val * doc_vector[token]
+            scores.append((idx, score))
+            
+        scores.sort(key=lambda x: x[1], reverse=True)
+        
+        results = []
+        for idx, score in scores[:top_k]:
+            if score > 0.01:
+                results.append(self.qa_pairs[idx])
+                
+        # If we didn't find enough matches by similarity, fall back to random
+        if len(results) < top_k:
+            import random
+            remaining = top_k - len(results)
+            candidates = [qa for qa in self.qa_pairs if qa not in results]
+            if candidates:
+                results.extend(random.sample(candidates, min(len(candidates), remaining)))
+                
+        return results

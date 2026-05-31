@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI, AsyncOpenAI
-from persona_engine import PersonaEngine
+from persona_engine import PersonaEngine, QAEngine
 from dotenv import load_dotenv
 
 # Load local environment variables from .env file
@@ -37,6 +37,7 @@ def load_persona(filepath: str):
         return yaml.safe_load(f)
 
 ENGINES = {}
+QA_ENGINES = {}
 PERSONAS = {}
 
 base_dir = os.path.dirname(__file__)
@@ -72,6 +73,12 @@ if os.path.exists(agents_dir):
             engine = PersonaEngine(corpus_path)
             engine.build_index()
             ENGINES[member_id] = engine
+            
+            qa_jsonl_path = os.path.join(base_dir, f"{member_id}_qa_dataset.jsonl")
+            if os.path.exists(qa_jsonl_path):
+                qa_engine = QAEngine(qa_jsonl_path)
+                qa_engine.load_and_index()
+                QA_ENGINES[member_id] = qa_engine
 
 DEFAULT_COGNITIVE_BOUNDARIES = {
     "munger": {
@@ -106,7 +113,7 @@ DEFAULT_COGNITIVE_BOUNDARIES = {
     }
 }
 
-def build_lattice_prompt(persona: dict, retrieved_quotes: list, previous_context: str = "", debate_drafts: str = ""):
+def build_lattice_prompt(persona: dict, retrieved_quotes: list, previous_context: str = "", debate_drafts: str = "", qa_shots: list = None):
     base_prompt = persona.get('system_prompt_template', '')
     base_prompt += "\n\n你的核心思维模型底座:\n"
     for model in persona.get('decision_engine', []):
@@ -117,6 +124,12 @@ def build_lattice_prompt(persona: dict, retrieved_quotes: list, previous_context
         base_prompt += "\n\n【以下是你脑海中闪现的真实人生经历与历史亲历论述（你必须以上述论述为根基，用第一人称‘我’生动地融入到你的发言和阐述中）：】\n"
         for i, quote in enumerate(retrieved_quotes):
             base_prompt += f"--- [亲历经历/回忆 {i+1}] 来源: {quote['source']} ---\n「曾经发表过的真实见解与经历：\n{quote['content']}」\n\n"
+            
+    # Module A2: Few-Shot QA References (Dynamic Tone & Logic Injection)
+    if qa_shots:
+        base_prompt += "\n\n【你的历史问答风格参考（Few-Shot）】\n以下是你曾经真实的回答风格与策略思考，请务必模仿以下语气、用词、甚至刻薄或深邃的神韵来回答当前问题：\n"
+        for i, qa in enumerate(qa_shots):
+            base_prompt += f"--- [历史对话参考 {i+1}] ---\nUser: {qa.get('instruction', '')}\nYou: {qa.get('output', '')}\n\n"
             
     # Module B: Cognitive Circle Filter & Epoch Masking
     member_id = persona.get('member_id', '')
@@ -233,6 +246,11 @@ async def chat_with_board_stream(request: ChatRequest):
         
         debate_drafts_dict = {}
         quotes_dict = {}
+        qa_shots_dict = {}
+        
+        for mid in request.board_member_ids:
+            if mid in QA_ENGINES:
+                qa_shots_dict[mid] = QA_ENGINES[mid].retrieve(latest_user_message, top_k=2)
         
         # PRO MODE: Round 1 (Hidden Pre-Drafts)
         if request.mode == "pro":
@@ -244,7 +262,7 @@ async def chat_with_board_stream(request: ChatRequest):
                 retrieved = engine.retrieve(latest_user_message, top_k=2)
                 quotes_dict[mid] = retrieved
                 
-                draft_prompt = build_lattice_prompt(persona, retrieved, previous_context)
+                draft_prompt = build_lattice_prompt(persona, retrieved, previous_context, qa_shots=qa_shots_dict.get(mid))
                 draft_prompt += "\n【额外指令】：这是一份内部手稿。请用简短的150字以内概括你对这个问题的核心判断，以供其他董事参考。"
                 
                 try:
@@ -286,11 +304,11 @@ async def chat_with_board_stream(request: ChatRequest):
                 for mid, draft in debate_drafts_dict.items():
                     if mid != member_id:
                         other_drafts += f"【{PERSONAS[mid].get('name', mid)}】: {draft}\n\n"
-                system_prompt = build_lattice_prompt(persona, retrieved, previous_context, debate_drafts=other_drafts)
+                system_prompt = build_lattice_prompt(persona, retrieved, previous_context, debate_drafts=other_drafts, qa_shots=qa_shots_dict.get(member_id))
             else:
                 # FAST MODE
                 retrieved = engine.retrieve(latest_user_message, top_k=3)
-                system_prompt = build_lattice_prompt(persona, retrieved, previous_context)
+                system_prompt = build_lattice_prompt(persona, retrieved, previous_context, qa_shots=qa_shots_dict.get(member_id))
             
             yield f"data: {json.dumps({'event': 'quotes', 'member_id': member_id, 'quotes': retrieved}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'event': 'status', 'member_id': member_id, 'state': 'speaking', 'message': 'Speaking...'}, ensure_ascii=False)}\n\n"
@@ -460,4 +478,4 @@ async def delete_history_file(filename: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8080)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
