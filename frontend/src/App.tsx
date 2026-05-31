@@ -11,14 +11,15 @@ import grahamPhoto from './assets/graham.png';
 import russellPhoto from './assets/russell.png';
 import maoZedongPhoto from './assets/mao_zedong.png';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8080';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8080';
+const isLocalEnv = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 const BOARD_MEMBERS = [
-  { id: 'munger', name: 'Charlie Munger', title: 'Vice Chairman', photo: mungerPhoto, color: 'text-amber-600', border: 'border-amber-400', ring: 'ring-amber-200' },
   { id: 'buffett', name: 'Warren Buffett', title: 'Chairman', photo: buffettPhoto, color: 'text-emerald-600', border: 'border-emerald-400', ring: 'ring-emerald-200' },
+  { id: 'munger', name: 'Charlie Munger', title: 'Vice Chairman', photo: mungerPhoto, color: 'text-amber-600', border: 'border-amber-400', ring: 'ring-amber-200' },
+  { id: 'mao_zedong', name: 'Mao Zedong', title: 'Strategic Mentor', photo: maoZedongPhoto, color: 'text-red-600', border: 'border-red-400', ring: 'ring-red-200' },
   { id: 'paul_graham', name: 'Paul Graham', title: 'Advisor', photo: grahamPhoto, color: 'text-indigo-600', border: 'border-indigo-400', ring: 'ring-indigo-200' },
   { id: 'russell', name: 'Bertrand Russell', title: 'Philosopher', photo: russellPhoto, color: 'text-slate-600', border: 'border-slate-400', ring: 'ring-slate-200' },
-  { id: 'mao_zedong', name: 'Mao Zedong', title: 'Strategic Mentor', photo: maoZedongPhoto, color: 'text-red-600', border: 'border-red-400', ring: 'ring-red-200' },
 ];
 
 interface ChatMessage {
@@ -69,7 +70,7 @@ export default function App() {
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<{member_id: string, state: string, message: string} | null>(null);
   const [systemMsg, setSystemMsg] = useState<string>('');
-  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef<boolean>(true);
@@ -108,25 +109,41 @@ export default function App() {
 
   const fetchHistoryList = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/history`);
-      const data = await res.json();
-      setHistoryList(data);
+      if (isLocalEnv) {
+        const res = await fetch(`${API_BASE}/api/history`);
+        const data = await res.json();
+        setHistoryList(data);
+      } else {
+        const historyStr = localStorage.getItem('board_history_list');
+        if (historyStr) {
+          setHistoryList(JSON.parse(historyStr));
+        } else {
+          setHistoryList([]);
+        }
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Failed to fetch history list:", err);
     }
   };
 
   const loadHistoryFile = async (filename: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/history/${encodeURIComponent(filename)}`);
-      if (!res.ok) {
-        throw new Error(`Server returned status ${res.status}`);
+      let data: any = null;
+      if (isLocalEnv) {
+        const res = await fetch(`${API_BASE}/api/history/${encodeURIComponent(filename)}`);
+        if (!res.ok) throw new Error(`Server returned status ${res.status}`);
+        data = await res.json();
+        if (data.error) throw new Error(data.error);
+      } else {
+        const dataStr = localStorage.getItem(`board_session_${filename}`);
+        if (dataStr) {
+          data = JSON.parse(dataStr);
+        } else {
+          throw new Error("Session not found in local storage.");
+        }
       }
-      const data = await res.json();
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      if (data.messages) {
+
+      if (data && data.messages) {
         shouldAutoScrollRef.current = true;
         setMessages(data.messages);
         setSessionId(data.session_id);
@@ -143,12 +160,61 @@ export default function App() {
   const deleteHistoryFile = async (e: React.MouseEvent, filename: string) => {
     e.stopPropagation();
     try {
-      await fetch(`${API_BASE}/api/history/${filename}`, { method: 'DELETE' });
+      if (isLocalEnv) {
+        await fetch(`${API_BASE}/api/history/${filename}`, { method: 'DELETE' });
+      } else {
+        const historyStr = localStorage.getItem('board_history_list');
+        if (historyStr) {
+          let list = JSON.parse(historyStr);
+          list = list.filter((item: HistoryItem) => item.filename !== filename);
+          localStorage.setItem('board_history_list', JSON.stringify(list));
+        }
+        localStorage.removeItem(`board_session_${filename}`);
+      }
       fetchHistoryList();
     } catch (err) {
       console.error(err);
     }
   };
+
+  const saveSessionToLocal = (sid: string, msgs: ChatMessage[]) => {
+    if (!msgs || msgs.length === 0 || isLocalEnv) return; // Do not save to local storage if in local env
+    try {
+      const firstUserMsg = msgs.find(m => m.role === 'user')?.content || '战略会议';
+      const title = firstUserMsg.replace(/[\n\r\t]/g, ' ').trim().substring(0, 25);
+      
+      const sessionData = {
+        session_id: sid,
+        title: title,
+        timestamp: Math.floor(Date.now() / 1000),
+        messages: msgs
+      };
+      
+      localStorage.setItem(`board_session_${sid}`, JSON.stringify(sessionData));
+      
+      const historyStr = localStorage.getItem('board_history_list');
+      let list: HistoryItem[] = historyStr ? JSON.parse(historyStr) : [];
+      
+      const existingIdx = list.findIndex(item => item.filename === sid);
+      if (existingIdx >= 0) {
+        list[existingIdx].timestamp = sessionData.timestamp;
+        list[existingIdx].title = title;
+      } else {
+        list.push({ filename: sid, title: title, timestamp: sessionData.timestamp, session_id: sid });
+      }
+      
+      list.sort((a, b) => b.timestamp - a.timestamp);
+      localStorage.setItem('board_history_list', JSON.stringify(list));
+    } catch (err) {
+      console.error("Failed to save session locally:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (!isProcessing && !isSynthesizing && messages.length > 0 && sessionId) {
+      saveSessionToLocal(sessionId, messages);
+    }
+  }, [isProcessing, isSynthesizing, messages, sessionId]);
 
   const toggleParticipation = (id: string) => {
     if (isProcessing) return;
@@ -439,35 +505,36 @@ export default function App() {
       </div>
 
       {/* TOP LEFT: History Drawer Button & New Chat */}
-      <div className="absolute top-8 left-8 z-50 flex gap-3">
+      <div className="absolute top-4 left-4 md:top-8 md:left-8 z-50 flex gap-2 md:gap-3">
         <button 
           onClick={() => setIsDrawerOpen(true)}
-          className="flex items-center gap-2 bg-white/80 hover:bg-white text-slate-700 px-5 py-3 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
+          className="flex items-center gap-1 md:gap-2 bg-white/80 hover:bg-white text-slate-700 px-3 py-2 md:px-5 md:py-3 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
         >
-          <Clock size={18} />
-          <span className="text-sm font-bold tracking-widest uppercase text-slate-500">Records</span>
+          <Clock size={16} className="md:w-[18px] md:h-[18px]" />
+          <span className="text-[10px] md:text-sm font-bold tracking-widest uppercase text-slate-500">Records</span>
         </button>
         {messages.length > 0 && (
           <button 
             onClick={() => { setMessages([]); setSessionId(''); }}
-            className="flex items-center justify-center bg-white/80 hover:bg-white text-slate-500 hover:text-indigo-600 w-12 h-12 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
+            className="flex items-center justify-center bg-white/80 hover:bg-white text-slate-500 hover:text-indigo-600 px-3 py-2 md:w-12 md:h-12 rounded-full border border-slate-200 backdrop-blur-md shadow-sm transition-all"
             title="New Council Session"
           >
-            <Sparkles size={18} />
+            <Sparkles size={16} className="md:w-[18px] md:h-[18px]" />
+            <span className="text-[10px] md:hidden font-bold tracking-widest uppercase text-slate-500 ml-1">New</span>
           </button>
         )}
       </div>
 
       {/* TOP RIGHT: One-click Download / Export MD */}
       {messages.length > 0 && (
-        <div className="absolute top-8 right-8 z-50">
+        <div className="absolute top-4 right-4 md:top-8 md:right-8 z-50">
           <button 
             onClick={handleExportMarkdown}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-5 py-3 rounded-full border border-slate-800 shadow-md transition-all active:scale-95 duration-150"
+            className="flex items-center gap-1 md:gap-2 bg-slate-900 hover:bg-black text-white px-3 py-2 md:px-5 md:py-3 rounded-full border border-slate-800 shadow-md transition-all active:scale-95 duration-150"
             title="Export Session as Markdown"
           >
-            <Download size={18} />
-            <span className="text-sm font-bold tracking-widest uppercase">Export MD</span>
+            <Download size={16} className="md:w-[18px] md:h-[18px]" />
+            <span className="text-[10px] md:text-sm font-bold tracking-widest uppercase">Export MD</span>
           </button>
         </div>
       )}
@@ -484,7 +551,7 @@ export default function App() {
             <motion.div 
               initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="absolute top-0 left-0 h-full w-[450px] bg-white/95 backdrop-blur-3xl border-r border-slate-200 z-50 flex flex-col shadow-2xl"
+              className="absolute top-0 left-0 h-full w-full md:w-[450px] bg-white/95 backdrop-blur-3xl border-r border-slate-200 z-50 flex flex-col shadow-2xl"
             >
               <div className="p-8 border-b border-slate-100 flex justify-between items-center">
                 <h2 className="text-slate-800 font-bold text-lg tracking-wide flex items-center gap-2"><Clock size={20} className="text-slate-400" /> Board Records</h2>
@@ -517,8 +584,8 @@ export default function App() {
       </AnimatePresence>
 
       {/* HEADER: The Council Ring */}
-      <header className={`w-full flex justify-center items-center z-10 transition-all duration-500 ${isHeaderCollapsed ? 'py-4' : 'py-10'}`}>
-        <div className={`relative flex items-center bg-white/50 backdrop-blur-xl border border-slate-200/60 shadow-sm transition-all duration-500 ${isHeaderCollapsed ? 'px-8 py-3.5 gap-6 rounded-[2rem]' : 'px-12 py-6 gap-12 rounded-[3rem]'}`}>
+      <header className={`w-full flex justify-center items-center z-10 transition-all duration-500 px-2 ${isHeaderCollapsed ? 'py-2 md:py-4' : 'py-4 md:py-10'}`}>
+        <div className={`relative flex items-center justify-center bg-white/50 backdrop-blur-xl border border-slate-200/60 shadow-sm transition-all duration-500 ${isHeaderCollapsed ? 'px-4 md:px-8 py-2 md:py-3.5 gap-2 md:gap-6 rounded-[2rem]' : 'px-1 sm:px-4 md:px-12 py-3 md:py-6 gap-0 sm:gap-4 md:gap-12 rounded-[2rem] md:rounded-[3rem]'}`}>
           {BOARD_MEMBERS.map(member => {
             const isParticipating = participatingMembers.includes(member.id);
             const isCurrentSpeaker = currentStatus?.member_id === member.id;
@@ -531,7 +598,7 @@ export default function App() {
                 title={isParticipating ? "Click to exclude from next round" : "Click to include in next round"}
               >
                 <div className="relative">
-                  <div className={`rounded-full overflow-hidden border-2 transition-all duration-500 bg-white shadow-md ${isHeaderCollapsed ? 'w-10 h-10' : 'w-20 h-20 border-4'} ${isCurrentSpeaker ? `border-transparent ring-4 ring-offset-2 ${member.ring}` : 'border-white'}`}>
+                  <div className={`rounded-full overflow-hidden border-2 transition-all duration-500 bg-white shadow-md ${isHeaderCollapsed ? 'w-8 h-8 md:w-10 md:h-10' : 'w-12 h-12 sm:w-14 sm:h-14 md:w-20 md:h-20 border-2 md:border-4'} ${isCurrentSpeaker ? `border-transparent ring-2 md:ring-4 ring-offset-1 md:ring-offset-2 ${member.ring}` : 'border-white'}`}>
                     <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
                   </div>
                   {isParticipating && (
@@ -543,12 +610,12 @@ export default function App() {
                 
                 {/* Names and speaking indicator are hidden when collapsed */}
                 {!isHeaderCollapsed && (
-                  <div className="flex flex-col items-center mt-4 transition-all duration-300">
-                    <div className={`text-sm font-bold tracking-wide ${isCurrentSpeaker ? 'text-slate-800 font-extrabold' : 'text-slate-500'}`}>{member.name}</div>
-                    <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{member.title}</div>
+                  <div className="flex flex-col items-center mt-2 md:mt-4 transition-all duration-300 w-14 md:w-auto text-center px-0.5">
+                    <div className={`text-[9px] leading-tight md:text-sm font-bold tracking-tight md:tracking-wide break-words whitespace-pre-line ${isCurrentSpeaker ? 'text-slate-800 font-extrabold' : 'text-slate-500'}`}>{member.name.replace(' ', '\n')}</div>
+                    <div className="text-[7.5px] leading-none md:text-[10px] uppercase tracking-normal md:tracking-widest text-slate-400 font-bold mt-1 md:mt-0">{member.title}</div>
                     {isCurrentSpeaker && (
-                      <div className={`mt-2 text-[10px] uppercase tracking-widest font-black animate-pulse ${member.color}`}>
-                        {currentStatus.state === 'retrieving' ? 'Retrieving Memory...' : 'Speaking...'}
+                      <div className={`mt-1 md:mt-2 text-[8px] md:text-[10px] uppercase tracking-widest font-black animate-pulse ${member.color}`}>
+                        {currentStatus.state === 'retrieving' ? 'Retrieving...' : 'Speaking...'}
                       </div>
                     )}
                   </div>
@@ -571,7 +638,7 @@ export default function App() {
       {/* MIDDLE: Focus Stage & Chat History */}
       <main className="flex-1 overflow-hidden relative z-10 w-full flex flex-col items-center">
         
-        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 w-full max-w-5xl overflow-y-auto px-8 pb-12 scrollbar-hide flex flex-col gap-8">
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 w-full max-w-5xl overflow-y-auto px-4 md:px-8 pb-12 scrollbar-hide flex flex-col gap-6 md:gap-8">
           
           {messages.length === 0 ? (
             /* Welcome Screen */
@@ -592,11 +659,11 @@ export default function App() {
                       animate={{ opacity: 1, y: 0 }}
                       className="w-full flex justify-end"
                     >
-                      <div className="bg-slate-900 text-white p-6 rounded-[2rem] rounded-tr-sm max-w-[85%] shadow-md">
-                        <div className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+                      <div className="bg-slate-900 text-white p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] rounded-tr-sm max-w-[92%] md:max-w-[85%] shadow-md">
+                        <div className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest mb-1.5 md:mb-2 flex items-center gap-2">
                            You <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                         </div>
-                        <div className="text-lg font-serif leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                        <div className="text-base md:text-lg font-serif leading-relaxed whitespace-pre-wrap break-words">{msg.content}</div>
                       </div>
                     </motion.div>
                   );
@@ -611,27 +678,27 @@ export default function App() {
                       key={index}
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`w-full bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-[2rem] p-10 shadow-sm transition-all duration-500 ${msg.member_id === currentStatus?.member_id ? 'ring-2 ring-offset-2 ring-indigo-100 shadow-md bg-white' : ''}`}
+                      className={`w-full bg-white/70 backdrop-blur-md border border-slate-200/80 rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-10 shadow-sm transition-all duration-500 ${msg.member_id === currentStatus?.member_id ? 'ring-2 ring-offset-2 ring-indigo-100 shadow-md bg-white' : ''}`}
                     >
-                      <div className="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+                      <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 pb-3 md:pb-4 border-b border-slate-100">
                         {member ? (
                           <>
-                            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                            <div className="w-10 h-10 md:w-12 md:h-12 flex-shrink-0 rounded-full overflow-hidden border-2 border-white shadow-sm">
                               <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
                             </div>
                             <div>
-                              <h3 className="text-lg font-serif font-bold text-slate-800">{member.name}</h3>
-                              <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">{member.title}</div>
+                              <h3 className="text-base md:text-lg font-serif font-bold text-slate-800">{member.name}</h3>
+                              <div className="text-[9px] md:text-[10px] uppercase tracking-widest text-slate-400 font-bold">{member.title}</div>
                             </div>
                           </>
                         ) : (
                            <div>
-                              <h3 className="text-lg font-serif font-bold text-red-600">System Message</h3>
+                              <h3 className="text-base md:text-lg font-serif font-bold text-red-600">System Message</h3>
                            </div>
                         )}
                       </div>
 
-                      <div className="text-lg font-serif text-slate-700 leading-loose tracking-wide break-words">
+                      <div className="text-base md:text-lg font-serif text-slate-700 leading-loose tracking-wide break-words">
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
                           {msg.content || ''}
                         </ReactMarkdown>
@@ -673,22 +740,22 @@ export default function App() {
                       key={index}
                       initial={{ opacity: 0, y: 50, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      className="w-full bg-white border border-slate-200/80 shadow-[0_30px_100px_rgba(0,0,0,0.06)] rounded-[2.5rem] p-16 relative overflow-hidden"
+                      className="w-full bg-white border border-slate-200/80 shadow-[0_30px_100px_rgba(0,0,0,0.06)] rounded-[1.5rem] md:rounded-[2.5rem] p-6 md:p-16 relative overflow-hidden"
                     >
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-bl-full -z-10" />
-                      <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-50 rounded-tr-full -z-10" />
+                      <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-indigo-50 rounded-bl-full -z-10" />
+                      <div className="absolute bottom-0 left-0 w-32 h-32 md:w-64 md:h-64 bg-amber-50 rounded-tr-full -z-10" />
                       
-                      <div className="flex items-center gap-4 mb-12 border-b border-slate-100 pb-8">
-                        <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg">
-                          <FileSignature size={24} />
+                      <div className="flex items-center gap-3 md:gap-4 mb-6 md:mb-12 border-b border-slate-100 pb-4 md:pb-8">
+                        <div className="w-10 h-10 md:w-12 md:h-12 flex-shrink-0 bg-slate-900 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-lg">
+                          <FileSignature size={20} />
                         </div>
                         <div>
-                          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Executive Resolution</h2>
-                          <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">Chief Secretary's Report</div>
+                          <h2 className="text-lg md:text-2xl font-black text-slate-800 tracking-tight">Executive Resolution</h2>
+                          <div className="text-[10px] md:text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">Chief Secretary's Report</div>
                         </div>
                       </div>
 
-                      <div className="text-lg font-serif text-slate-700 leading-loose tracking-wide">
+                      <div className="text-base md:text-lg font-serif text-slate-700 leading-loose tracking-wide">
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MarkdownComponents}>
                           {msg.content}
                         </ReactMarkdown>
@@ -732,43 +799,43 @@ export default function App() {
       </main>
 
       {/* BOTTOM INPUT DOCK */}
-      <div className="w-full max-w-4xl mx-auto px-6 pb-8 z-30 flex flex-col gap-3">
+      <div className="w-full max-w-4xl mx-auto px-4 md:px-6 pb-4 md:pb-8 z-30 flex flex-col gap-2 md:gap-3">
         
         {/* Fast / Pro Toggle Switch */}
-        <div className="flex justify-start px-2">
+        <div className="flex justify-start px-1 md:px-2">
           <div className="bg-white/80 backdrop-blur-md border border-slate-200 p-1 rounded-full flex items-center gap-1 shadow-sm">
             <button
               onClick={() => setMode('fast')}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all ${mode === 'fast' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+              className={`flex items-center gap-1 md:gap-1.5 px-3 py-1.5 md:px-4 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all ${mode === 'fast' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
             >
               <Zap size={14} /> Fast
             </button>
             <button
               onClick={() => setMode('pro')}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all ${mode === 'pro' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+              className={`flex items-center gap-1 md:gap-1.5 px-3 py-1.5 md:px-4 md:py-1.5 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest transition-all ${mode === 'pro' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
             >
               <BrainCircuit size={14} /> Pro (Debate)
             </button>
           </div>
         </div>
 
-        <div className="bg-white/90 backdrop-blur-2xl border border-white rounded-[2rem] flex items-end shadow-[0_15px_50px_rgba(0,0,0,0.05)] p-3 relative transition-all">
+        <div className="bg-white/90 backdrop-blur-2xl border border-white rounded-[1.5rem] md:rounded-[2rem] flex items-end shadow-[0_15px_50px_rgba(0,0,0,0.05)] p-2 md:p-3 relative transition-all">
           <textarea 
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isProcessing}
-            placeholder={isProcessing ? "Board is occupied..." : "Present your strategy or counter-argument..."}
-            className="w-full bg-transparent text-slate-800 placeholder-slate-400 px-6 py-4 outline-none resize-none min-h-[60px] max-h-[300px] overflow-y-auto text-lg font-serif disabled:opacity-50"
+            placeholder={isProcessing ? "Board is occupied..." : "Present your strategy..."}
+            className="w-full bg-transparent text-slate-800 placeholder-slate-400 px-3 py-3 md:px-6 md:py-4 outline-none resize-none min-h-[50px] md:min-h-[60px] max-h-[150px] md:max-h-[300px] overflow-y-auto text-base md:text-lg font-serif disabled:opacity-50"
             rows={1}
           />
           <button 
             onClick={handleSubmit}
             disabled={!input.trim() || isProcessing || participatingMembers.length === 0}
-            className="h-14 w-14 flex-shrink-0 bg-slate-900 text-white rounded-2xl flex items-center justify-center hover:bg-black transition-all shadow-[0_8px_20px_rgba(0,0,0,0.15)] m-1 disabled:opacity-50 disabled:shadow-none"
+            className="h-11 w-11 md:h-14 md:w-14 flex-shrink-0 bg-slate-900 text-white rounded-xl md:rounded-2xl flex items-center justify-center hover:bg-black transition-all shadow-[0_8px_20px_rgba(0,0,0,0.15)] m-0.5 md:m-1 disabled:opacity-50 disabled:shadow-none"
           >
-            {isProcessing ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+            {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>
         </div>
       </div>
